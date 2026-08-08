@@ -12,9 +12,9 @@ pick one.
 Three layers, dependencies point strictly downward:
 
 ```
-src/demo/   skin        (App.tsx, styles.css, main.tsx)
+demo/       skin        (App.tsx, styles.css, main.tsx — outside the package)
     │
-src/lib/    binding     (useChecklist.ts)
+src/lib/    binding     (useChecklist.ts, Toolbar.tsx, index.ts)
     │
 src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts)
 ```
@@ -25,7 +25,12 @@ src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts)
   actions, and applying `state.focus` to the DOM (the focus contract,
   spec §6). It computes nothing about documents or carets itself.
 - **Skin** owns presentation: layout, theming, viewport/keyboard handling,
-  toolbars. The demo skin is a reference consumer, not part of the library.
+  toolbar markup. The demo skin is a reference consumer, not part of the
+  library — it lives outside `src/` and imports only from `src/lib/index.ts`,
+  never from individual lib modules.
+- `Toolbar` is a headless binding-layer component: it derives the command
+  surface (`setRowType`, `moveRow`, active row) and owns the §6 pointerdown
+  guard on its container; a render-prop child owns every pixel.
 
 Nothing in `lib/` may import from `demo/`. Nothing in core may import from
 the binding. Violations of direction are always findings, never judgment
@@ -65,12 +70,12 @@ earned through a bug.
 
 ## 3. Public surface
 
-The intended package surface (to be declared in `src/lib/index.ts` — open
-finding, not yet done):
+Declared in `src/lib/index.ts`:
 
-- `useChecklist`, `reducer`, `createInitialState`
+- `useChecklist`, `Toolbar`, `reducer`, `createInitialState`
 - `parseMarkdown`, `serialize`
-- The types: `Row`, `RowId`, `Caret`, `State`, `Action`
+- The types: `Row`, `RowId`, `Caret`, `State`, `Action` (and row variants,
+  `ToolbarRenderProps`)
 
 `id.ts` is an implementation detail and stays private. The `Action` union
 has deliberately drifted from spec §10 (`promoteHeader`, `pasteText`,
@@ -123,7 +128,8 @@ From the 2026-08 architecture review, still open, with disposition:
 - **(3) Rendering concerns in the binding** — autosize, `CSS.supports`
   probe, `scrollIntoView`. *Accepted direction:* move to skin; keyboard
   avoidance gets exactly one owner. Do before adding any second skin.
-- **(5) No `lib/index.ts`** — *accepted*, prerequisite for Planner (§4.1).
+- **(5) No `lib/index.ts`** — *resolved*: `src/lib/index.ts` declares the
+  surface and the demo consumes only it.
 - **(6) `beforeinput` wired via ref-callback expando** — *accepted
   direction:* one delegated listener via `getContainerProps`.
 - **(7) Non-deterministic ids in the reducer** — *superseded* by the

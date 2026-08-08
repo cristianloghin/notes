@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useChecklist } from '../lib/useChecklist';
+import { Toolbar, useChecklist } from '../src/lib';
 import './styles.css';
 
 /**
@@ -52,18 +52,6 @@ export default function App() {
   const { rows, focus, dispatch, getRowProps, getCheckboxProps, toMarkdown } =
     useChecklist({ initial: SAMPLE });
   const viewport = useVisualViewportBox();
-  const activeIndex = focus ? rows.findIndex((r) => r.id === focus.id) : -1;
-  const activeRow = activeIndex >= 0 ? rows[activeIndex] : null;
-
-  // Toolbar commands: single dispatches — the reducer owns caret placement,
-  // so no command needs to read or restore the DOM caret.
-  const setRowType = (rowType: 'header' | 'item' | 'text') =>
-    activeRow &&
-    activeRow.type !== rowType &&
-    dispatch({ type: 'setRowType', id: activeRow.id, rowType });
-  const moveRow = (delta: -1 | 1) =>
-    activeRow &&
-    dispatch({ type: 'move', id: activeRow.id, toIndex: activeIndex + delta });
 
   return (
     <div
@@ -160,95 +148,96 @@ export default function App() {
       </div>
 
       {/* Accessory toolbar: a plain flex child at the shell's bottom — never
-          position: fixed, so it cannot swim while the list scrolls.
-          preventDefault on pointerdown at the container so no tap in the bar
-          (buttons, disabled buttons, gaps) blurs the field or drops the
-          keyboard (spec §6). */}
-      <div className="toolbar" onPointerDown={(e) => e.preventDefault()}>
-        <div className="toolbar-inner">
-          <div className="tb-seg" role="group" aria-label="Row type">
+          position: fixed, so it cannot swim while the list scrolls. The
+          Toolbar component owns the pointerdown guard (spec §6); this render
+          prop owns all presentation. */}
+      <Toolbar rows={rows} focus={focus} dispatch={dispatch} className="toolbar">
+        {({ activeRow, canMoveUp, canMoveDown, setRowType, moveRow }) => (
+          <div className="toolbar-inner">
+            <div className="tb-seg" role="group" aria-label="Row type">
+              <button
+                className={`tb-btn tb-heading${activeRow?.type === 'header' ? ' is-on' : ''}`}
+                disabled={!activeRow}
+                aria-pressed={activeRow?.type === 'header'}
+                aria-label="Heading"
+                onClick={() => setRowType('header')}
+              >
+                <span className="tb-heading-glyph">H</span>
+              </button>
+              <button
+                className={`tb-btn${activeRow?.type === 'item' ? ' is-on' : ''}`}
+                disabled={!activeRow}
+                aria-pressed={activeRow?.type === 'item'}
+                aria-label="List item"
+                onClick={() => setRowType('item')}
+              >
+                <svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                  />
+                  <path
+                    d="M5.2 8.3l2 2 3.6-4.2"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <button
+                className={`tb-btn${activeRow?.type === 'text' ? ' is-on' : ''}`}
+                disabled={!activeRow}
+                aria-pressed={activeRow?.type === 'text'}
+                aria-label="Plain text"
+                onClick={() => setRowType('text')}
+              >
+                <span className="tb-heading-glyph">¶</span>
+              </button>
+            </div>
+            <div className="tb-spacer" />
             <button
-              className={`tb-btn tb-heading${activeRow?.type === 'header' ? ' is-on' : ''}`}
-              disabled={!activeRow}
-              aria-pressed={activeRow?.type === 'header'}
-              aria-label="Heading"
-              onClick={() => setRowType('header')}
+              className="tb-btn"
+              disabled={!canMoveUp}
+              aria-label="Move row up"
+              onClick={() => moveRow(-1)}
             >
-              <span className="tb-heading-glyph">H</span>
-            </button>
-            <button
-              className={`tb-btn${activeRow?.type === 'item' ? ' is-on' : ''}`}
-              disabled={!activeRow}
-              aria-pressed={activeRow?.type === 'item'}
-              aria-label="List item"
-              onClick={() => setRowType('item')}
-            >
-              <svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
-                <circle
-                  cx="8"
-                  cy="8"
-                  r="6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                 <path
-                  d="M5.2 8.3l2 2 3.6-4.2"
+                  d="M8 13V3M3.5 7.5L8 3l4.5 4.5"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.6"
+                  strokeWidth="1.8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
             </button>
             <button
-              className={`tb-btn${activeRow?.type === 'text' ? ' is-on' : ''}`}
-              disabled={!activeRow}
-              aria-pressed={activeRow?.type === 'text'}
-              aria-label="Plain text"
-              onClick={() => setRowType('text')}
+              className="tb-btn"
+              disabled={!canMoveDown}
+              aria-label="Move row down"
+              onClick={() => moveRow(1)}
             >
-              <span className="tb-heading-glyph">¶</span>
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path
+                  d="M8 3v10M3.5 8.5L8 13l4.5-4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
           </div>
-          <div className="tb-spacer" />
-          <button
-            className="tb-btn"
-            disabled={!activeRow || activeIndex <= 0}
-            aria-label="Move row up"
-            onClick={() => moveRow(-1)}
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path
-                d="M8 13V3M3.5 7.5L8 3l4.5 4.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-          <button
-            className="tb-btn"
-            disabled={!activeRow || activeIndex === rows.length - 1}
-            aria-label="Move row down"
-            onClick={() => moveRow(1)}
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path
-                d="M8 3v10M3.5 8.5L8 13l4.5-4.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
+        )}
+      </Toolbar>
     </div>
   );
 }
