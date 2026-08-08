@@ -1,5 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NoteProvider, NoteStore, serialize, type Row } from "../src";
+import {
+  NoteProvider,
+  NoteStore,
+  serialize,
+  useOnAction,
+  useOnRowsChange,
+  type Row,
+} from "../src";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
@@ -94,10 +101,6 @@ export default function App() {
   const [panel, setPanel] = useState<"none" | "md" | "planner" | "writes">(
     "none",
   );
-  const [markdown, setMarkdown] = useState(() => serialize(INITIAL_ROWS));
-  const [plannerItems, setPlannerItems] = useState(SAMPLE_PLANNER);
-  // Latest saved Planner state, so each save can preserve metadata by id.
-  const plannerRef = useRef(SAMPLE_PLANNER);
   // The host side of the source channel: the store subscribes at
   // construction, and initial data plus every external update (a partner's
   // edit arriving over realtime) flow through the same push function.
@@ -128,31 +131,18 @@ export default function App() {
       rows.map((r) => (r === first ? { ...r, done: !r.done } : r)),
     );
   };
-  // Two independent consumers of the same seam: the markdown view and the
-  // Planner-shaped "database".
-  useEffect(
-    () => note.onRowsChange((rows) => setMarkdown(serialize(rows))),
-    [note],
+  // Three independent consumers of the store's seams, as client-shaped
+  // React state: the markdown view, the Planner "database" (previous value
+  // carries the metadata to preserve), and the targeted-writes log.
+  const markdown = useOnRowsChange(note, (rows) => serialize(rows));
+  const plannerItems = useOnRowsChange<PlannerItem[]>(note, (rows, previous) =>
+    rowsToPlanner(rows, previous ?? SAMPLE_PLANNER),
   );
-  useEffect(
-    () =>
-      note.onRowsChange((rows) => {
-        const next = rowsToPlanner(rows, plannerRef.current);
-        plannerRef.current = next;
-        setPlannerItems(next);
-      }),
-    [note],
-  );
-  // Third consumer: onAction → targeted row writes (newest first, last 12).
-  const [writes, setWrites] = useState<string[]>([]);
-  useEffect(
-    () =>
-      note.onAction((action, prevRows, nextRows) => {
-        setWrites((w) =>
-          [...actionToWrites(action, prevRows, nextRows), ...w].slice(0, 12),
-        );
-      }),
-    [note],
+  const writes = useOnAction<string[]>(
+    note,
+    (previous, action, prevRows, nextRows) =>
+      [...actionToWrites(action, prevRows, nextRows), ...previous].slice(0, 12),
+    [],
   );
   const dock = useKeyboardDock();
   const shellRef = useRef<HTMLDivElement | null>(null);

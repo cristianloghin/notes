@@ -93,6 +93,9 @@ earned through a bug.
 Declared in `src/index.ts`:
 
 - `NoteStore`, `NoteProvider`, `useNote`
+- `useOnRowsChange`, `useOnAction` — React bindings of the store's
+  consumer seams: mapper/fold in, client-shaped React state out; same
+  exclusions as the seams themselves (edits only, no external pushes)
 - `Editor`, `Toolbar`
 - `parseMarkdown`, `serialize`
 - The types: `Row`, `RowId`, `GenId`, `Caret`, `State`, `Action` (and row
