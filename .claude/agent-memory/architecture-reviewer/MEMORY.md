@@ -1,0 +1,2 @@
+- [Governing spec (not architecture.md)](project-governing-spec.md) — docs/checklist-editor-spec.md is the architectural authority; also records the tooling coverage gap.
+- [Open findings: checklist-editor](review-open-findings-checklist-editor.md) — 7 findings from the 2026-08-08 review, all dispositions unknown; re-derive before restating.

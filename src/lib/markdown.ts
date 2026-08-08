@@ -1,0 +1,38 @@
+import { genId } from './id';
+import type { Row } from './types';
+
+const ITEM_RE = /^- \[([ xX])\] ?(.*)$/;
+
+/** Parse markdown into rows. Also serves as the paste handler (spec §8). */
+export function parseMarkdown(src: string): Row[] {
+  const rows: Row[] = [];
+  for (const raw of src.split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    if (line.trim() === '') continue; // blank lines are presentational, not rows
+    if (line.startsWith('# ')) {
+      rows.push({ id: genId(), type: 'header', text: line.slice(2) });
+      continue;
+    }
+    const m = ITEM_RE.exec(line);
+    if (m) {
+      rows.push({ id: genId(), type: 'item', text: m[2], done: m[1] !== ' ' });
+    } else {
+      rows.push({ id: genId(), type: 'item', text: line, done: false });
+    }
+  }
+  return rows;
+}
+
+export function serialize(rows: Row[]): string {
+  const out: string[] = [];
+  rows.forEach((row, i) => {
+    if (row.type === 'header') {
+      if (i > 0) out.push('');
+      out.push(`# ${row.text}`);
+    } else {
+      // equal-length ASCII markers so toggling never changes layout (spec §8)
+      out.push(`${row.done ? '- [x]' : '- [ ]'} ${row.text}`);
+    }
+  });
+  return out.join('\n');
+}
