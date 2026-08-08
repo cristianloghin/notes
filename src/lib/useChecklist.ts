@@ -257,11 +257,24 @@ export function useChecklist(options?: {
       // own focus application; non-collapsed selections are not reported
       // (collapsing them via re-application would break text selection).
       onFocus: (e: FocusEvent<HTMLTextAreaElement>) => {
+        // iOS Safari always scrolls to "reveal" a focused field — even one
+        // already fully visible — and exposes no way to prevent it; that
+        // misfiring reveal is the intermittent viewport jump when moving the
+        // caret between rows. Safari skips the reveal entirely when the
+        // field has opacity 0 at the moment it computes the scroll, so blink
+        // it for one task (restored before paint; imperceptible). Revealing
+        // is then fully owned by this library/skin via scrollOnFocus.
+        const el = e.currentTarget;
+        const prevOpacity = el.style.opacity;
+        el.style.opacity = "0";
+        setTimeout(() => {
+          el.style.opacity = prevOpacity;
+        });
         if (applyingFocus.current) return;
         dispatch({
           type: "focusRow",
           id,
-          offset: e.currentTarget.selectionStart ?? 0,
+          offset: el.selectionStart ?? 0,
           origin: "dom",
         });
       },
