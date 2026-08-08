@@ -30,6 +30,10 @@ body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  /* No grey flash on tap (inherited by every element), and no double-tap
+     zoom gesture — rapid taps between rows otherwise nudge the viewport. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 body {
@@ -141,6 +145,12 @@ body {
   outline: none;
   line-height: 1.35;
   field-sizing: content;
+  /* Strip user-agent chrome so Safari cannot draw its own focus/press
+     styling on the fields. */
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* Headings and paragraphs have no checkbox — they span the gutter and sit
