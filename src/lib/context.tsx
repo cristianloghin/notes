@@ -4,44 +4,38 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { ChecklistStore } from "./store";
+import type { NoteStore } from "./store";
 import type { State } from "./types";
 
-const ChecklistContext = createContext<ChecklistStore | null>(null);
+const NoteContext = createContext<NoteStore | null>(null);
 
 /**
- * Provides a stable ChecklistStore instance to Editor, Toolbar, and any
- * custom component using the hooks below. Create the instance once
- * (module scope, or useState(() => new ChecklistStore(...))[0]) — the
- * provider does not create or own it.
+ * Provides a stable NoteStore instance to Editor, Toolbar, and any custom
+ * component using the hooks below. Create the instance once (module scope,
+ * or useState(() => new NoteStore(...))[0]) — the provider does not create
+ * or own it.
  */
-export function ChecklistProvider({
-  checklist,
+export function NoteProvider({
+  store,
   children,
 }: {
-  checklist: ChecklistStore;
+  store: NoteStore;
   children: ReactNode;
 }) {
-  return (
-    <ChecklistContext.Provider value={checklist}>
-      {children}
-    </ChecklistContext.Provider>
-  );
+  return <NoteContext.Provider value={store}>{children}</NoteContext.Provider>;
 }
 
-/** The store instance from context. Throws outside a ChecklistProvider. */
-export function useChecklistStore(): ChecklistStore {
-  const store = useContext(ChecklistContext);
+/** The store instance from context. Throws outside a NoteProvider. */
+export function useNoteStore(): NoteStore {
+  const store = useContext(NoteContext);
   if (!store) {
-    throw new Error(
-      "useChecklistStore: no ChecklistProvider found above this component",
-    );
+    throw new Error("useNoteStore: no NoteProvider found above this component");
   }
   return store;
 }
 
 /** Subscribe to the store's state; re-renders on every state change. */
-export function useChecklistState(): State {
-  const store = useChecklistStore();
+export function useNoteState(): State {
+  const store = useNoteStore();
   return useSyncExternalStore(store.subscribe, store.getState, store.getState);
 }

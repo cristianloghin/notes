@@ -1,6 +1,6 @@
 import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { useEditorBindings } from "./bindings";
-import { useChecklistStore } from "./context";
+import { useNoteStore } from "./context";
 import type { Row } from "./types";
 
 type Bindings = ReturnType<typeof useEditorBindings>;
@@ -21,8 +21,9 @@ export type EditorRowRenderProps = {
 };
 
 /**
- * Headless editor body. Reads the store from ChecklistContext and wires the
- * DOM bindings (focus contract, input translation, autosize) internally —
+ * Headless editor body. Reads the store from NoteProvider's context and
+ * wires the DOM bindings (focus contract, input translation, autosize)
+ * internally —
  * no props to thread. A render-prop child owns all presentation, mirroring
  * Toolbar. The component owns two invariants no skin may break:
  *
@@ -43,7 +44,7 @@ export function Editor({
       true). Set false if the host owns all scrolling. */
   scrollOnFocus?: boolean;
 }) {
-  const store = useChecklistStore();
+  const store = useNoteStore();
   const { state, getRowProps, getCheckboxProps } = useEditorBindings(
     store,
     scrollOnFocus,

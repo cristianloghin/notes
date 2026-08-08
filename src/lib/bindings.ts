@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
-import type { ChecklistStore } from "./store";
+import type { NoteStore } from "./store";
 import type { RowId } from "./types";
 
 const supportsFieldSizing =
@@ -34,10 +34,7 @@ function autosize(el: HTMLTextAreaElement) {
  * itself; event handlers read store.getState() at event time, so they can
  * never act on a stale snapshot.
  */
-export function useEditorBindings(
-  store: ChecklistStore,
-  scrollOnFocus = true,
-) {
+export function useEditorBindings(store: NoteStore, scrollOnFocus = true) {
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   const dispatch = store.dispatch;
   const refs = useRef(new Map<RowId, HTMLTextAreaElement>());

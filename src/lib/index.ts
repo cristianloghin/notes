@@ -1,12 +1,8 @@
 // Public surface of the library (architecture.md §3). Everything else in
 // this directory is an implementation detail — consumers, including the
 // demo, import only from here.
-export { ChecklistStore } from "./store";
-export {
-  ChecklistProvider,
-  useChecklistStore,
-  useChecklistState,
-} from "./context";
+export { NoteStore } from "./store";
+export { NoteProvider, useNoteStore, useNoteState } from "./context";
 export {
   Editor,
   type EditorRowRenderProps,

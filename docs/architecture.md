@@ -20,10 +20,13 @@ src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts, store.ts)
 ```
 
 - **Core** is pure TypeScript: no React, no DOM, no browser globals. The
-  reducer is the product; `ChecklistStore` is its thin observable wrapper —
+  reducer is the product; `NoteStore` is its thin observable wrapper —
   state lives in the instance, components subscribe. Consumers create the
-  instance and hand it to `ChecklistProvider`; nothing else is threaded
-  through props.
+  instance and hand it to `NoteProvider`; nothing else is threaded through
+  props. The store's `onRowsChange` callback (rows changes only, never
+  caret-only updates, fired after subscribers) is the integration seam a
+  consumer app persists from — this supersedes the old `useChecklist
+  onChange` option and is step one of the §4 adapter roadmap.
 - **Binding** owns exactly three jobs: providing the store through context
   (`useSyncExternalStore`), translating DOM input events into actions, and
   applying `state.focus` to the DOM (the focus contract, spec §6). It
@@ -86,8 +89,7 @@ earned through a bug.
 
 Declared in `src/lib/index.ts`:
 
-- `ChecklistStore`, `ChecklistProvider`, `useChecklistStore`,
-  `useChecklistState`
+- `NoteStore`, `NoteProvider`, `useNoteStore`, `useNoteState`
 - `Editor`, `Toolbar`, `reducer`, `createInitialState`
 - `parseMarkdown`, `serialize`
 - The types: `Row`, `RowId`, `Caret`, `State`, `Action` (and row variants,

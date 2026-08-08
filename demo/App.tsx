@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ChecklistProvider,
-  ChecklistStore,
-  useChecklistState,
-  useChecklistStore,
+  NoteProvider,
+  NoteStore,
+  useNoteState,
+  useNoteStore,
 } from "../src/lib";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
@@ -60,14 +60,14 @@ Ask at the store which primer works on old plaster.`;
 
 /** Live markdown view — subscribes so it stays current while typing. */
 function MarkdownPreview() {
-  useChecklistState();
-  const store = useChecklistStore();
+  useNoteState();
+  const store = useNoteStore();
   return <pre className="md-preview">{store.toMarkdown()}</pre>;
 }
 
 export default function App() {
   const [showMarkdown, setShowMarkdown] = useState(false);
-  const [checklist] = useState(() => new ChecklistStore({ initial: SAMPLE }));
+  const [note] = useState(() => new NoteStore({ initial: SAMPLE }));
   const dock = useKeyboardDock();
   const shellRef = useRef<HTMLDivElement | null>(null);
 
@@ -99,7 +99,7 @@ export default function App() {
   }, []);
 
   return (
-    <ChecklistProvider checklist={checklist}>
+    <NoteProvider store={note}>
       <div className="shell" ref={shellRef}>
         {DEBUG_HUD && <DebugHud />}
         <div className="scroll-area">
@@ -118,7 +118,7 @@ export default function App() {
                   className="bar-btn"
                   onPointerDown={(e) => e.preventDefault()}
                   onClick={() =>
-                    navigator.clipboard.writeText(checklist.toMarkdown())
+                    navigator.clipboard.writeText(note.toMarkdown())
                   }
                 >
                   Copy MD
@@ -145,6 +145,6 @@ export default function App() {
           <EditorToolbar />
         </div>
       </div>
-    </ChecklistProvider>
+    </NoteProvider>
   );
 }

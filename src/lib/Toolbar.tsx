@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useChecklistState, useChecklistStore } from "./context";
+import { useNoteState, useNoteStore } from "./context";
 import type { Row } from "./types";
 
 export type ToolbarRenderProps = {
@@ -17,8 +17,8 @@ export type ToolbarRenderProps = {
 };
 
 /**
- * Headless toolbar. Reads the store from ChecklistContext — no props to
- * thread — and derives the command surface for a render-prop child, which
+ * Headless toolbar. Reads the store from NoteProvider's context — no props
+ * to thread — and derives the command surface for a render-prop child, which
  * owns all presentation. The wrapper div calls preventDefault on
  * pointerdown (spec §6) so no tap inside the bar — buttons, disabled
  * buttons, or gaps — blurs the active field or drops the soft keyboard.
@@ -32,8 +32,8 @@ export function Toolbar({
   className?: string;
   style?: CSSProperties;
 }) {
-  const store = useChecklistStore();
-  const { rows, focus } = useChecklistState();
+  const store = useNoteStore();
+  const { rows, focus } = useNoteState();
 
   const activeIndex = focus ? rows.findIndex((r) => r.id === focus.id) : -1;
   const activeRow = activeIndex >= 0 ? rows[activeIndex] : null;
