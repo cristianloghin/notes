@@ -1,9 +1,9 @@
 import { Action, Caret, Row, Toolbar } from "../../src/lib";
 
-/* Accessory toolbar: a plain flex child at the shell's bottom — never
-  position: fixed, so it cannot swim while the list scrolls. The
-  Toolbar component owns the pointerdown guard (spec §6); this render
-  prop owns all presentation. */
+/* Accessory toolbar, rendered inside the fixed .toolbar-dock (App.tsx),
+  which is the only keyboard-tracking element in the layout. The Toolbar
+  component owns the pointerdown guard (spec §6); this render prop owns
+  all presentation. */
 
 export const EditorToolbar = ({
   rows,

@@ -1,78 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChecklist } from "../src/lib";
 import { DebugHud } from "./components/DebugHud";
 import { EditorToolbar } from "./components/EditorToolbar";
 import "./styles.css";
 
-// DEBUG: disables every scroll our code initiates — the hook's
-// focused-row reveal (scrollOnFocus: false) and the page-scroll pinning in
-// useVisualViewportBox. With this true, any remaining jump is Safari's own
-// behavior, not ours. Flip back to false after testing.
-const DISABLE_APP_SCROLL = true;
-
-// DEBUG: render the layout fully static — the shell keeps its CSS 100dvh
-// height and never reacts to visualViewport changes. If the jump survives
-// this too, no JS-driven layout is involved at all.
-const FREEZE_SHELL = true;
-
 // DEBUG: on-screen event log (visual viewport, scrolls, focus) so a jump on
 // device can be attributed to the signal that fired at that moment.
-const DEBUG_HUD = true;
+const DEBUG_HUD = false;
 
 /**
- * Track the visual viewport so the app shell can be sized to exactly the
- * on-screen area above the soft keyboard. The page itself never scrolls
- * (body is overflow: hidden); the list scrolls inside the shell instead,
- * so the toolbar — a normal flex child at the shell's bottom — cannot
- * drift while scrolling. Fixed-position chasing of the keyboard is what
- * causes the iOS "swimming toolbar"; this avoids it entirely.
+ * The layout is fully static (CSS 100dvh shell; the list scrolls in its own
+ * container) — JS never sizes or translates the content, which is what made
+ * the page jump on focus changes. The ONLY thing that tracks the keyboard
+ * is the toolbar dock, and it is positioned imperatively inside the
+ * visualViewport event (no React re-render, no frame lag): worst case a
+ * viewport flutter twitches the bar, never the content. Safari's own small
+ * focus-reveal pan is left alone — it is the desired behavior.
  */
-function useVisualViewportBox() {
-  const [box, setBox] = useState(() => ({
-    height: window.innerHeight,
-    offsetTop: 0,
-    keyboardOpen: false,
-  }));
+function useKeyboardDock() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
+    const el = ref.current;
+    if (!vv || !el) return;
     const update = () => {
-      // iOS "reveals" a newly focused field by scrolling the visual (and
-      // sometimes the layout) viewport, then often snaps back — even though
-      // this page has nothing to scroll. If the shell chases those nudges
-      // through React state it reacts a frame late and visibly jumps on
-      // every tap into a row. Pin the page scroll synchronously inside the
-      // event instead, then read the viewport.
-      if (
-        !DISABLE_APP_SCROLL &&
-        (window.scrollX !== 0 || window.scrollY !== 0)
-      ) {
-        window.scrollTo(0, 0);
-      }
-      setBox((prev) => {
-        const next = {
-          height: vv.height,
-          offsetTop: vv.offsetTop,
-          keyboardOpen: window.innerHeight - vv.height > 100,
-        };
-        return prev.height === next.height &&
-          prev.offsetTop === next.offsetTop &&
-          prev.keyboardOpen === next.keyboardOpen
-          ? prev
-          : next;
-      });
+      // Distance from the layout viewport's bottom edge to the keyboard top.
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      el.style.transform = inset > 0 ? `translateY(-${inset}px)` : "";
+      setKeyboardOpen(window.innerHeight - vv.height > 100);
     };
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
-    window.addEventListener("scroll", update);
     update();
     return () => {
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
-      window.removeEventListener("scroll", update);
     };
   }, []);
-  return box;
+  return { ref, keyboardOpen };
 }
 
 const SAMPLE = `# Hardware
@@ -89,31 +55,11 @@ Ask at the store which primer works on old plaster.`;
 export default function App() {
   const [showMarkdown, setShowMarkdown] = useState(false);
   const { rows, focus, dispatch, getRowProps, getCheckboxProps, toMarkdown } =
-    useChecklist({ initial: SAMPLE, scrollOnFocus: !DISABLE_APP_SCROLL });
-  const viewport = useVisualViewportBox();
-
-  // Safari's native "reveal focused field" scroll is suppressed by the
-  // opacity blink in the library, so the app owns the one legitimate case:
-  // when the keyboard opens, the shell shrinks — bring the focused row back
-  // into view inside the scroll area.
-  useEffect(() => {
-    if (DISABLE_APP_SCROLL || !viewport.keyboardOpen) return;
-    const el = document.activeElement;
-    if (el instanceof HTMLElement) el.scrollIntoView({ block: "nearest" });
-  }, [viewport.keyboardOpen]);
+    useChecklist({ initial: SAMPLE });
+  const dock = useKeyboardDock();
 
   return (
-    <div
-      className={`shell${viewport.keyboardOpen ? " kb-open" : ""}`}
-      style={
-        FREEZE_SHELL
-          ? undefined
-          : {
-              height: viewport.height,
-              transform: `translateY(${viewport.offsetTop}px)`,
-            }
-      }
-    >
+    <div className="shell">
       {DEBUG_HUD && <DebugHud />}
       <div className="scroll-area">
         <div className="app">
@@ -205,7 +151,12 @@ export default function App() {
           {showMarkdown && <pre className="md-preview">{toMarkdown()}</pre>}
         </div>
       </div>
-      <EditorToolbar rows={rows} focus={focus} dispatch={dispatch} />
+      <div
+        className={`toolbar-dock${dock.keyboardOpen ? " kb-open" : ""}`}
+        ref={dock.ref}
+      >
+        <EditorToolbar rows={rows} focus={focus} dispatch={dispatch} />
+      </div>
     </div>
   );
 }

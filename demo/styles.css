@@ -44,15 +44,16 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
-/* App shell: sized to the visual viewport (JS sets height/translate), so its
-   bottom edge sits exactly on top of the soft keyboard. The page never
-   scrolls; .scroll-area does. */
+/* App shell: fully static — JS never sizes or translates it (a reactive
+   shell is what made the layout jump on focus changes). The page never
+   scrolls; .scroll-area does, and only the toolbar dock tracks the
+   keyboard. */
 .shell {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 100dvh; /* fallback until JS measures the visual viewport */
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -68,7 +69,8 @@ body {
 .app {
   max-width: 560px;
   margin: 0 auto;
-  padding: 12px 12px 24px;
+  /* Bottom clearance for the fixed toolbar dock. */
+  padding: 12px 12px calc(84px + env(safe-area-inset-bottom));
 }
 
 .topbar {
@@ -224,8 +226,18 @@ body {
   padding: 0 4px;
 }
 
+/* The only keyboard-tracking element. Positioned imperatively (transform)
+   inside the visualViewport event — content layout never depends on it. */
+.toolbar-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  will-change: transform;
+}
+
 .toolbar {
-  flex: none;
   background: var(--card);
   border-top: 1px solid var(--border);
   padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
