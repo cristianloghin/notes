@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useChecklist } from "../src/lib";
+import { DebugHud } from "./components/DebugHud";
 import { EditorToolbar } from "./components/EditorToolbar";
 import "./styles.css";
 
@@ -8,6 +9,15 @@ import "./styles.css";
 // useVisualViewportBox. With this true, any remaining jump is Safari's own
 // behavior, not ours. Flip back to false after testing.
 const DISABLE_APP_SCROLL = true;
+
+// DEBUG: render the layout fully static — the shell keeps its CSS 100dvh
+// height and never reacts to visualViewport changes. If the jump survives
+// this too, no JS-driven layout is involved at all.
+const FREEZE_SHELL = true;
+
+// DEBUG: on-screen event log (visual viewport, scrolls, focus) so a jump on
+// device can be attributed to the signal that fired at that moment.
+const DEBUG_HUD = true;
 
 /**
  * Track the visual viewport so the app shell can be sized to exactly the
@@ -95,11 +105,16 @@ export default function App() {
   return (
     <div
       className={`shell${viewport.keyboardOpen ? " kb-open" : ""}`}
-      style={{
-        height: viewport.height,
-        transform: `translateY(${viewport.offsetTop}px)`,
-      }}
+      style={
+        FREEZE_SHELL
+          ? undefined
+          : {
+              height: viewport.height,
+              transform: `translateY(${viewport.offsetTop}px)`,
+            }
+      }
     >
+      {DEBUG_HUD && <DebugHud />}
       <div className="scroll-area">
         <div className="app">
           <header className="topbar">

@@ -294,6 +294,23 @@ body {
   flex: 1;
 }
 
+.debug-hud {
+  position: fixed;
+  top: calc(4px + env(safe-area-inset-top));
+  left: 4px;
+  z-index: 999;
+  margin: 0;
+  padding: 4px 7px;
+  font: 10px/1.4 ui-monospace, Menlo, monospace;
+  color: #4afa72;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: pre;
+  max-width: calc(100vw - 16px);
+  overflow: hidden;
+}
+
 .md-preview {
   background: var(--card);
   border: 1px solid var(--border);
