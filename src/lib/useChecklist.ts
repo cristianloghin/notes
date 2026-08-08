@@ -138,9 +138,10 @@ export function useChecklist(options?: {
         const text = e.currentTarget.value;
         const caret = e.currentTarget.selectionStart;
         // Input translation, like Enter → split: "# " at the start of an
-        // item triggers header promotion; the reducer owns the conversion.
+        // item or paragraph triggers header promotion; the reducer owns it.
         if (
-          row?.type === 'item' &&
+          row != null &&
+          row.type !== 'header' &&
           text.startsWith('# ') &&
           !text.includes('\n') &&
           !composing.current

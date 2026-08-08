@@ -45,6 +45,28 @@ describe('split', () => {
     expect(next.rows[2].text).toBe('');
   });
 
+  it('on an empty item converts it to a plain-text paragraph (double-Enter list exit)', () => {
+    const s = createInitialState('- [ ] milk');
+    const id = s.rows[0].id;
+    const afterFirst = reducer(s, { type: 'split', id, offset: 4 });
+    const emptyItem = afterFirst.rows[1];
+    expect(emptyItem).toMatchObject({ type: 'item', text: '' });
+
+    const afterSecond = reducer(afterFirst, { type: 'split', id: emptyItem.id, offset: 0 });
+    expect(afterSecond.rows).toHaveLength(2);
+    expect(afterSecond.rows[1]).toMatchObject({ id: emptyItem.id, type: 'text', text: '' });
+    expect(afterSecond.focus).toEqual({ id: emptyItem.id, offset: 0 });
+  });
+
+  it('splits paragraphs into paragraphs', () => {
+    const s = createInitialState('plain note');
+    const id = s.rows[0].id;
+    expect(s.rows[0].type).toBe('text');
+    const next = reducer(s, { type: 'split', id, offset: 5 });
+    expect(next.rows[0]).toMatchObject({ type: 'text', text: 'plain' });
+    expect(next.rows[1]).toMatchObject({ type: 'text', text: ' note' });
+  });
+
   it('on a header inserts an item, not another header', () => {
     const s = state();
     const id = s.rows[0].id; // "# Hardware"
@@ -202,6 +224,13 @@ describe('markdown round-trip', () => {
   it('serializes back losslessly apart from ids and blank lines', () => {
     const rows = parseMarkdown(doc);
     expect(serialize(rows)).toBe(doc);
+  });
+
+  it('round-trips plain-text paragraphs as bare lines', () => {
+    const src = '# Trip\nRemember the charger.\n- [ ] socks';
+    const rows = parseMarkdown(src);
+    expect(rows[1]).toMatchObject({ type: 'text', text: 'Remember the charger.' });
+    expect(serialize(rows)).toBe(src);
   });
 
   it('uses equal-length markers for checked and unchecked', () => {

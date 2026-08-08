@@ -147,6 +147,10 @@ body {
   font-size: 17px;
 }
 
+.field-text {
+  font-size: 17px;
+}
+
 .field-header {
   font-size: 21px;
   font-weight: 700;
@@ -224,11 +228,16 @@ body {
   align-items: center;
 }
 
+.tb-seg {
+  display: flex;
+  gap: 4px;
+}
+
 .tb-btn {
   font: inherit;
   min-height: 44px;
-  min-width: 52px;
-  padding: 0 14px;
+  min-width: 48px;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

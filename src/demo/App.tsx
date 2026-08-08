@@ -37,13 +37,15 @@ function useVisualViewportBox() {
 }
 
 const SAMPLE = `# Hardware
+Check the garage before buying any of this.
 - [ ] screws
 - [x] hinges
 - [ ] wood glue
 
 # Paint
 - [ ] primer
-- [ ] rollers`;
+- [ ] rollers
+Ask at the store which primer works on old plaster.`;
 
 export default function App() {
   const [showMarkdown, setShowMarkdown] = useState(false);
@@ -55,13 +57,10 @@ export default function App() {
 
   // Toolbar commands: single dispatches — the reducer owns caret placement,
   // so no command needs to read or restore the DOM caret.
-  const toggleHeading = () =>
+  const setRowType = (rowType: 'header' | 'item' | 'text') =>
     activeRow &&
-    dispatch({
-      type: 'setRowType',
-      id: activeRow.id,
-      rowType: activeRow.type === 'header' ? 'item' : 'header',
-    });
+    activeRow.type !== rowType &&
+    dispatch({ type: 'setRowType', id: activeRow.id, rowType });
   const moveRow = (delta: -1 | 1) =>
     activeRow &&
     dispatch({ type: 'move', id: activeRow.id, toIndex: activeIndex + delta });
@@ -106,6 +105,14 @@ export default function App() {
                 {...getRowProps(row.id)}
               />
             </div>
+          ) : row.type === 'text' ? (
+            <div className="row row-text" key={row.id} role="listitem">
+              <textarea
+                className="field field-text"
+                aria-label="Paragraph"
+                {...getRowProps(row.id)}
+              />
+            </div>
           ) : (
             <div
               className={`row row-item${row.done ? ' is-done' : ''}`}
@@ -142,9 +149,10 @@ export default function App() {
       </div>
 
       <p className="hint">
-        Enter → next item · Backspace at start → merge · tap circle → toggle ·
-        paste multi-line markdown to import · <code>#&nbsp;</code> at the start
-        of a line also makes a heading
+        Enter → next item · Enter on an empty item → plain text · Backspace at
+        start → merge · tap circle → toggle · paste multi-line markdown to
+        import · <code>#&nbsp;</code> at the start of a line also makes a
+        heading
       </p>
 
           {showMarkdown && <pre className="md-preview">{toMarkdown()}</pre>}
@@ -158,16 +166,52 @@ export default function App() {
           keyboard (spec §6). */}
       <div className="toolbar" onPointerDown={(e) => e.preventDefault()}>
         <div className="toolbar-inner">
-          <button
-            className={`tb-btn tb-heading${activeRow?.type === 'header' ? ' is-on' : ''}`}
-            disabled={!activeRow}
-            aria-pressed={activeRow?.type === 'header'}
-            aria-label="Toggle heading"
-            onClick={toggleHeading}
-          >
-            <span className="tb-heading-glyph">H</span>
-            <span className="tb-label">Heading</span>
-          </button>
+          <div className="tb-seg" role="group" aria-label="Row type">
+            <button
+              className={`tb-btn tb-heading${activeRow?.type === 'header' ? ' is-on' : ''}`}
+              disabled={!activeRow}
+              aria-pressed={activeRow?.type === 'header'}
+              aria-label="Heading"
+              onClick={() => setRowType('header')}
+            >
+              <span className="tb-heading-glyph">H</span>
+            </button>
+            <button
+              className={`tb-btn${activeRow?.type === 'item' ? ' is-on' : ''}`}
+              disabled={!activeRow}
+              aria-pressed={activeRow?.type === 'item'}
+              aria-label="List item"
+              onClick={() => setRowType('item')}
+            >
+              <svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
+                <circle
+                  cx="8"
+                  cy="8"
+                  r="6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                />
+                <path
+                  d="M5.2 8.3l2 2 3.6-4.2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              className={`tb-btn${activeRow?.type === 'text' ? ' is-on' : ''}`}
+              disabled={!activeRow}
+              aria-pressed={activeRow?.type === 'text'}
+              aria-label="Plain text"
+              onClick={() => setRowType('text')}
+            >
+              <span className="tb-heading-glyph">¶</span>
+            </button>
+          </div>
           <div className="tb-spacer" />
           <button
             className="tb-btn"

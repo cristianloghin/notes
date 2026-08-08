@@ -52,14 +52,14 @@ export function reducer(state: State, action: Action): State {
       return { rows, focus };
     }
 
-    // "# " typed at the start of an item converts it to a header — the only
-    // way to create a header from a soft keyboard. The binding detects the
-    // trigger; this action owns the conversion and caret arithmetic.
+    // "# " typed at the start of an item or paragraph converts it to a
+    // header — the only way to create a header from a soft keyboard. The
+    // binding detects the trigger; this action owns the conversion.
     case 'promoteHeader': {
       const i = indexOf(state, action.id);
       if (i < 0) return state;
       const row = state.rows[i];
-      if (row.type !== 'item') return state;
+      if (row.type === 'header') return state;
       const text = action.text.startsWith('# ') ? action.text.slice(2) : action.text;
       const rows = state.rows.slice();
       rows[i] = { id: row.id, type: 'header', text };
@@ -71,12 +71,21 @@ export function reducer(state: State, action: Action): State {
       const i = indexOf(state, action.id);
       if (i < 0) return state;
       const row = state.rows[i];
+      const rows = state.rows.slice();
+      // Double-Enter list exit: Enter on an empty item converts it to a
+      // plain-text paragraph in place instead of adding another checkbox.
+      if (row.type === 'item' && row.text === '') {
+        rows[i] = { id: row.id, type: 'text', text: '' };
+        return { rows, focus: { id: row.id, offset: 0 } };
+      }
       const head = row.text.slice(0, action.offset);
       const tail = row.text.slice(action.offsetEnd ?? action.offset);
-      // Items split into items; a header spawns an item below, never
-      // another header (spec §5).
-      const newRow: Row = { id: genId(), type: 'item', text: tail, done: false };
-      const rows = state.rows.slice();
+      // Items split into items, paragraphs into paragraphs; a header spawns
+      // an item below, never another header (spec §5).
+      const newRow: Row =
+        row.type === 'text'
+          ? { id: genId(), type: 'text', text: tail }
+          : { id: genId(), type: 'item', text: tail, done: false };
       rows[i] = { ...row, text: head };
       rows.splice(i + 1, 0, newRow);
       return { rows, focus: { id: newRow.id, offset: 0 } };
@@ -126,7 +135,9 @@ export function reducer(state: State, action: Action): State {
       rows[i] =
         action.rowType === 'header'
           ? { id: row.id, type: 'header', text: row.text }
-          : { id: row.id, type: 'item', text: row.text, done: false };
+          : action.rowType === 'text'
+            ? { id: row.id, type: 'text', text: row.text }
+            : { id: row.id, type: 'item', text: row.text, done: false };
       // Re-emit focus: a type switch typically remounts the row's field
       // (skins render headers and items differently), which blurs it — a
       // fresh focus object makes the view re-apply within the same event.

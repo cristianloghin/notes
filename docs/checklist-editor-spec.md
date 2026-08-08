@@ -27,7 +27,7 @@ it does not ship.
 
 ### In scope (v1)
 
-- Flat list of rows: headers and checklist items
+- Flat list of rows: headers, checklist items, and plain-text paragraphs
 - Enter to create, Backspace to merge, arrow keys to traverse
 - Toggle done state by tap
 - Markdown-compatible serialization
@@ -93,7 +93,8 @@ type RowId = string;
 
 type Row =
   | { id: RowId; type: 'header'; text: string }
-  | { id: RowId; type: 'item'; text: string; done: boolean };
+  | { id: RowId; type: 'item'; text: string; done: boolean }
+  | { id: RowId; type: 'text'; text: string };
 
 type Caret = { id: RowId; offset: number };
 
@@ -123,6 +124,7 @@ The reducer owns caret placement. The view never computes where focus lands.
 | Enter | caret mid-text | split row; tail moves to a new row of the same type | new row, `0` |
 | Enter | caret at end | insert empty row below, same type as current | new row, `0` |
 | Enter | on a header | insert an **item** below (not another header) | new row, `0` |
+| Enter | on an **empty item** | convert the row to a plain-text paragraph in place (double-Enter list exit) | same row, `0` |
 | Backspace | `offset === 0`, previous row exists | append current text to previous; delete current | previous, at its pre-merge length |
 | Backspace | `offset === 0`, current row empty | delete current row | previous, at end |
 | Backspace | `offset === 0`, first row | no-op | unchanged |
@@ -208,8 +210,11 @@ regenerated on parse.
 
 - `# ` prefix → header
 - `- [ ] ` / `- [x] ` → item, unchecked/checked
-- Any other non-empty line parses as an unchecked item
+- Any other non-empty line parses as a plain-text paragraph row, and
+  paragraph rows serialize as bare lines
 - Blank lines are not preserved as rows; spacing is presentational
+- Known limitation: a paragraph whose text itself starts with `# ` or
+  `- [ ] ` will re-parse as a header/item; markers are not escaped
 
 Markers are ASCII and equal length (`- [ ] ` and `- [x] ` are both six
 characters) so a toggle never changes the string's layout. Unicode ballot
@@ -268,8 +273,8 @@ it.
 
 - Does checking an item move it to the bottom of its section, or stay in place?
 - Collapsible sections — worth the state, or does it invite nesting?
-- Should an empty item plus Enter do anything special, or is a run of empty rows
-  the user's business?
+- ~~Should an empty item plus Enter do anything special?~~ **Answered:** it
+  converts the row to a plain-text paragraph — the double-Enter list exit.
 - Section reordering: move the header and its derived range, or forbid it in v1?
 - Does the default skin ship at all, or is the library headless-only?
 

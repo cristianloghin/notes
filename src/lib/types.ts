@@ -2,7 +2,8 @@ export type RowId = string;
 
 export type HeaderRow = { id: RowId; type: 'header'; text: string };
 export type ItemRow = { id: RowId; type: 'item'; text: string; done: boolean };
-export type Row = HeaderRow | ItemRow;
+export type TextRow = { id: RowId; type: 'text'; text: string };
+export type Row = HeaderRow | ItemRow | TextRow;
 
 export type Caret = { id: RowId; offset: number };
 
