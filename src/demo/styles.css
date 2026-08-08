@@ -143,6 +143,13 @@ body {
   field-sizing: content;
 }
 
+/* Headings and paragraphs have no checkbox — they span the gutter and sit
+   on the left margin; only items are indented by the checkbox column. */
+.row-header .field,
+.row-text .field {
+  grid-column: 1 / -1;
+}
+
 .field-item {
   font-size: 17px;
 }
