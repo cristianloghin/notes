@@ -141,10 +141,14 @@ phase in the spec):
    factory threads through `reducer`, `createInitialState`, and
    `parseMarkdown` (defaulted to the library's), so splits, pastes, and
    parses all mint through one path. Determinism is the host's choice.
-3. **Action observation** — `onAction(action, prevRows, nextRows)` so an
-   adapter can translate edits into host writes without diffing. Must be a
-   registration (returning unsubscribe), like `subscribe`/`onRowsChange` —
-   never a constructor option.
+3. **Action observation** — *done 2026-08-08*:
+   `onAction(fn): unsubscribe` fires for every dispatched action that
+   changed rows, with the action and both row snapshots, so an adapter
+   translates edits into targeted host writes without diffing. Same
+   exclusions as `onRowsChange` (no caret-only actions, no external
+   pushes); order per dispatch is subscribers → onAction → onRowsChange.
+   Listeners see the action as dispatched — internal delegation is not
+   exposed.
 4. **External updates** — *done 2026-08-08*: `new NoteStore({ source })`
    subscribes the store to host pushes; initial load and live updates
    arrive through one channel. `applyExternal(rows)` is the underlying

@@ -3,7 +3,7 @@ import { NoteProvider, NoteStore, serialize, type Row } from "../src";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
-import { plannerToRows, rowsToPlanner } from "./planner/adapter";
+import { actionToWrites, plannerToRows, rowsToPlanner } from "./planner/adapter";
 import { SAMPLE_PLANNER, type PlannerItem } from "./planner/data";
 import "./styles.css";
 
@@ -74,8 +74,26 @@ function PlannerPreview({ items }: { items: PlannerItem[] }) {
   );
 }
 
+/** Row-level writes as onAction translates them — newest first. Outside
+    the provider like the other consumers: pure adapter output. */
+function WritesPreview({ writes }: { writes: string[] }) {
+  return (
+    <div>
+      <pre className="md-preview">
+        {writes.length === 0 ? "(no writes yet — edit something)" : writes.join("\n")}
+      </pre>
+      <p className="hint">
+        One edit → targeted row writes via onAction, instead of saving the
+        whole list. External pushes never appear here.
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
-  const [panel, setPanel] = useState<"none" | "md" | "planner">("none");
+  const [panel, setPanel] = useState<"none" | "md" | "planner" | "writes">(
+    "none",
+  );
   const [markdown, setMarkdown] = useState(() => serialize(INITIAL_ROWS));
   const [plannerItems, setPlannerItems] = useState(SAMPLE_PLANNER);
   // Latest saved Planner state, so each save can preserve metadata by id.
@@ -122,6 +140,17 @@ export default function App() {
         const next = rowsToPlanner(rows, plannerRef.current);
         plannerRef.current = next;
         setPlannerItems(next);
+      }),
+    [note],
+  );
+  // Third consumer: onAction → targeted row writes (newest first, last 12).
+  const [writes, setWrites] = useState<string[]>([]);
+  useEffect(
+    () =>
+      note.onAction((action, prevRows, nextRows) => {
+        setWrites((w) =>
+          [...actionToWrites(action, prevRows, nextRows), ...w].slice(0, 12),
+        );
       }),
     [note],
   );
@@ -182,6 +211,15 @@ export default function App() {
               <button
                 className="bar-btn"
                 onPointerDown={(e) => e.preventDefault()}
+                onClick={() =>
+                  setPanel((p) => (p === "writes" ? "none" : "writes"))
+                }
+              >
+                Writes
+              </button>
+              <button
+                className="bar-btn"
+                onPointerDown={(e) => e.preventDefault()}
                 onClick={simulatePartnerEdit}
               >
                 Partner
@@ -214,6 +252,7 @@ export default function App() {
 
           {panel === "md" && <MarkdownPreview markdown={markdown} />}
           {panel === "planner" && <PlannerPreview items={plannerItems} />}
+          {panel === "writes" && <WritesPreview writes={writes} />}
         </div>
       </div>
       <div

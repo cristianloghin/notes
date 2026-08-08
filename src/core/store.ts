@@ -53,6 +53,9 @@ export class NoteStore {
   private state: State;
   private listeners = new Set<() => void>();
   private rowsListeners = new Set<(rows: Row[]) => void>();
+  private actionListeners = new Set<
+    (action: Action, prevRows: Row[], nextRows: Row[]) => void
+  >();
   private genId?: GenId;
   private teardown?: () => void;
 
@@ -118,6 +121,23 @@ export class NoteStore {
     };
   };
 
+  /** Register an action listener; returns an unsubscribe function. Fires
+      for every dispatched action that changed the rows — with the action
+      and both row snapshots, so an adapter can translate the edit into
+      targeted host writes without diffing. Same exclusions as
+      onRowsChange: caret-only actions and external pushes never fire.
+      Listeners receive the action as dispatched (internal delegation,
+      e.g. multi-line setText routing through the paste path, is not
+      exposed). Order per dispatch: subscribers → onAction → onRowsChange. */
+  onAction = (
+    listener: (action: Action, prevRows: Row[], nextRows: Row[]) => void,
+  ): (() => void) => {
+    this.actionListeners.add(listener);
+    return () => {
+      this.actionListeners.delete(listener);
+    };
+  };
+
   dispatch = (action: Action): void => {
     const prev = this.state;
     const next = reducer(prev, action, this.genId);
@@ -125,6 +145,9 @@ export class NoteStore {
     this.state = next;
     for (const listener of [...this.listeners]) listener();
     if (next.rows !== prev.rows) {
+      for (const listener of [...this.actionListeners]) {
+        listener(action, prev.rows, next.rows);
+      }
       for (const listener of [...this.rowsListeners]) listener(next.rows);
     }
   };
@@ -136,5 +159,6 @@ export class NoteStore {
     this.teardown = undefined;
     this.listeners.clear();
     this.rowsListeners.clear();
+    this.actionListeners.clear();
   };
 }

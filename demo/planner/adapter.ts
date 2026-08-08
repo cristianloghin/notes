@@ -1,4 +1,4 @@
-import type { Row } from "../../src";
+import type { Action, Row } from "../../src";
 import type { PlannerItem } from "./data";
 
 /**
@@ -36,6 +36,54 @@ export function plannerToRows(items: PlannerItem[]): Row[] {
     rows.push({ id: item.id, type: "item", text: item.title, done: item.done });
   }
   return rows;
+}
+
+/**
+ * onAction → targeted pseudo-writes: what Planner's write queue would
+ * enqueue for one edit, instead of saving the whole list. Handles the
+ * common actions precisely; structural edits it doesn't model fall back
+ * to a full resync marker.
+ */
+export function actionToWrites(
+  action: Action,
+  prevRows: Row[],
+  nextRows: Row[],
+): string[] {
+  switch (action.type) {
+    case "toggleDone": {
+      const row = nextRows.find((r) => r.id === action.id);
+      if (row?.type !== "item") break;
+      return [
+        `UPDATE list_item SET done = ${row.done} WHERE id = '${row.id}'`,
+      ];
+    }
+    case "setText":
+    case "promoteHeader": {
+      const row = nextRows.find((r) => r.id === action.id);
+      if (!row) break;
+      return [
+        `UPDATE list_item SET title = '${row.text}' WHERE id = '${row.id}'`,
+      ];
+    }
+    case "split": {
+      const prevIds = new Set(prevRows.map((r) => r.id));
+      const minted = nextRows.find((r) => !prevIds.has(r.id));
+      if (!minted) break; // double-Enter converts in place, no insert
+      const at = nextRows.indexOf(minted);
+      return [
+        `INSERT INTO list_item (id, title, sort_order) VALUES ('${minted.id}', '${minted.text}', ${at})`,
+      ];
+    }
+    case "mergeBackward":
+    case "remove": {
+      const nextIds = new Set(nextRows.map((r) => r.id));
+      const gone = prevRows.filter((r) => !nextIds.has(r.id));
+      return gone.map((r) => `DELETE FROM list_item WHERE id = '${r.id}'`);
+    }
+    case "move":
+      return [`UPDATE list_item SET sort_order = … (reorder around '${action.id}')`];
+  }
+  return [`-- ${action.type}: full-list resync`];
 }
 
 export function rowsToPlanner(

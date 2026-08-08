@@ -73,6 +73,54 @@ describe("NoteStore", () => {
     });
   });
 
+  describe("onAction", () => {
+    it("fires with the action and both row snapshots when rows changed", () => {
+      const store = new NoteStore({ initial: "- [ ] a" });
+      const listener = vi.fn();
+      store.onAction(listener);
+      const id = store.getState().rows[0].id;
+      const before = store.getState().rows;
+
+      store.dispatch({ type: "toggleDone", id });
+      expect(listener).toHaveBeenCalledTimes(1);
+      const [action, prevRows, nextRows] = listener.mock.calls[0];
+      expect(action).toEqual({ type: "toggleDone", id });
+      expect(prevRows).toBe(before);
+      expect(nextRows).toBe(store.getState().rows);
+    });
+
+    it("does not fire for caret-only actions or external pushes", () => {
+      const store = new NoteStore({ initial: "- [ ] ab" });
+      const listener = vi.fn();
+      store.onAction(listener);
+      const id = store.getState().rows[0].id;
+      store.dispatch({ type: "focusRow", id, offset: 1 });
+      store.applyExternal([
+        { id: "x9", type: "item", text: "pushed", done: false },
+      ]);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("fires between subscribers and rows listeners", () => {
+      const order: string[] = [];
+      const store = new NoteStore({ initial: "- [ ] a" });
+      store.subscribe(() => order.push("subscriber"));
+      store.onRowsChange(() => order.push("rows"));
+      store.onAction(() => order.push("action"));
+      store.dispatch({ type: "toggleDone", id: store.getState().rows[0].id });
+      expect(order).toEqual(["subscriber", "action", "rows"]);
+    });
+
+    it("returns an unsubscribe function", () => {
+      const store = new NoteStore({ initial: "- [ ] a" });
+      const listener = vi.fn();
+      const unsubscribe = store.onAction(listener);
+      unsubscribe();
+      store.dispatch({ type: "toggleDone", id: store.getState().rows[0].id });
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
   describe("source / applyExternal", () => {
     it("loads initial data through the push channel", () => {
       const store = new NoteStore({
