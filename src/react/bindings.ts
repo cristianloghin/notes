@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   type ClipboardEvent,
@@ -42,6 +43,7 @@ export function useEditorBindings(
   const dispatch = store.dispatch;
   const refs = useRef(new Map<RowId, HTMLTextAreaElement>());
   const composing = useRef(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   // True while the layout effect is applying focus to the DOM, so the focus
   // events that application fires are not echoed back as passive syncs.
   const applyingFocus = useRef(false);
@@ -129,18 +131,33 @@ export function useEditorBindings(
     }
   }
 
+  // One delegated native beforeinput listener on the Editor container —
+  // React's synthetic onBeforeInput does not cover deletions, so this must
+  // be native. Delegation (vs per-element attach) matters doubly: elements
+  // never hold listeners that outlive them, and the handler is read from a
+  // ref at event time, so it always closes over the CURRENT store — a
+  // store swap (e.g. StrictMode remount recreating it) can never strand
+  // the soft-keyboard Enter/Backspace path on a disposed instance.
+  const handleBeforeInputRef = useRef(handleBeforeInput);
+  handleBeforeInputRef.current = handleBeforeInput;
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const listener = (e: Event) => {
+      const target = e.target;
+      if (!(target instanceof HTMLTextAreaElement)) return;
+      const id = target.dataset.rowId;
+      if (id) handleBeforeInputRef.current(id, e as InputEvent);
+    };
+    container.addEventListener("beforeinput", listener);
+    return () => container.removeEventListener("beforeinput", listener);
+  }, []);
+
   function makeRef(id: RowId) {
     return (el: HTMLTextAreaElement | null) => {
       if (el) {
         refs.current.set(id, el);
-        const marked = el as HTMLTextAreaElement & { __clAttached?: boolean };
-        if (!marked.__clAttached) {
-          marked.__clAttached = true;
-          el.addEventListener("beforeinput", (e) =>
-            handleBeforeInput(id, e as InputEvent),
-          );
-          if (!supportsFieldSizing) autosize(el);
-        }
+        if (!supportsFieldSizing) autosize(el);
       } else {
         refs.current.delete(id);
       }
@@ -151,6 +168,7 @@ export function useEditorBindings(
     const row = state.rows.find((r) => r.id === id);
     return {
       ref: makeRef(id),
+      "data-row-id": id,
       value: row?.text ?? "",
       rows: 1,
       enterKeyHint: "next" as const,
@@ -285,5 +303,5 @@ export function useEditorBindings(
     };
   }
 
-  return { getRowProps, getCheckboxProps };
+  return { containerRef, getRowProps, getCheckboxProps };
 }

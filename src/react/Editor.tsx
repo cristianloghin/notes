@@ -45,13 +45,13 @@ export function Editor({
   scrollOnFocus?: boolean;
 }) {
   const { store, state } = useNote();
-  const { getRowProps, getCheckboxProps } = useEditorBindings(
+  const { containerRef, getRowProps, getCheckboxProps } = useEditorBindings(
     store,
     state,
     scrollOnFocus,
   );
   return (
-    <div className={className} style={style} role="list">
+    <div ref={containerRef} className={className} style={style} role="list">
       {state.rows.map((row, index) => (
         <Fragment key={row.id}>
           {children({

@@ -191,8 +191,15 @@ Still open, with disposition (details in the reviewer's memory,
   made Safari's focus-reveal pan the desired behavior); `scrollIntoView`
   and autosize remain in the binding, `scrollIntoView` gated by
   `scrollOnFocus`. Full move-to-skin still open; do before any second skin.
-- **`beforeinput` wired via ref-callback expando** — *accepted direction:*
-  one delegated listener on the container `Editor` owns.
+- ~~**`beforeinput` wired via ref-callback expando**~~ — *resolved
+  2026-08-08, forced by a production bug*: the attach-once listeners held
+  the first store's dispatch, so `useNoteStore`'s StrictMode remount
+  (store swap) stranded the soft-keyboard Enter/Backspace/dictation paths
+  on a disposed instance. Now one delegated native listener on the
+  container `Editor` owns, resolving the row id from `data-row-id` and
+  reading the handler from a ref at event time — a store swap can never
+  strand it. Lesson recorded: attach-once DOM listeners closing over
+  swappable dependencies are bugs waiting for a swap.
 - **`Toolbar` derives document facts** (`activeRow`, `canMoveUp/Down`) —
   *accepted direction:* move the derivations to core as pure functions of
   `State` so row-grain hosts can reuse them.
