@@ -14,7 +14,7 @@ Three layers, dependencies point strictly downward:
 ```
 demo/       skin        (App.tsx, styles.css, main.tsx — outside the package)
     │
-src/lib/    binding     (useChecklist.ts, Toolbar.tsx, index.ts)
+src/lib/    binding     (useChecklist.ts, Editor.tsx, Toolbar.tsx, index.ts)
     │
 src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts)
 ```
@@ -31,6 +31,9 @@ src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts)
 - `Toolbar` is a headless binding-layer component: it derives the command
   surface (`setRowType`, `moveRow`, active row) and owns the §6 pointerdown
   guard on its container; a render-prop child owns every pixel.
+- `Editor` is its counterpart for the editor body: it maps rows to a
+  render-prop child and owns the keyed-by-row-id invariant (spec §7) and
+  the container's list semantics; all row markup is the child's.
 
 Nothing in `lib/` may import from `demo/`. Nothing in core may import from
 the binding. Violations of direction are always findings, never judgment
@@ -77,10 +80,11 @@ earned through a bug.
 
 Declared in `src/lib/index.ts`:
 
-- `useChecklist`, `Toolbar`, `reducer`, `createInitialState`
+- `useChecklist`, `Editor`, `Toolbar`, `reducer`, `createInitialState`
 - `parseMarkdown`, `serialize`
 - The types: `Row`, `RowId`, `Caret`, `State`, `Action` (and row variants,
-  `ToolbarRenderProps`)
+  `ToolbarRenderProps`, `EditorRowRenderProps`, `FieldProps`,
+  `CheckboxProps`)
 
 `id.ts` is an implementation detail and stays private. The `Action` union
 has deliberately drifted from spec §10 (`promoteHeader`, `pasteText`,
