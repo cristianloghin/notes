@@ -30,12 +30,14 @@ src/index.ts — the public surface; the only module consumers import from.
   integration seam a consumer app persists from — step one of the §4
   adapter roadmap. The store does not serialize; string-grain hosts call
   `serialize(store.getState().rows)`.
-- **Binding** owns exactly three jobs: providing the store through context
-  (`useSyncExternalStore`), translating DOM input events into actions, and
-  applying `state.focus` to the DOM (the focus contract, spec §6). It
-  computes nothing about documents or carets itself. Dispatches from
-  discrete events flush subscribers synchronously, so the focus contract's
-  same-call-stack guarantee survives the store indirection.
+- **Binding** owns exactly four jobs: providing the store through context
+  (`useSyncExternalStore`), binding the store's consumer seams to React
+  state (`useOnRowsChange`, `useOnAction`), translating DOM input events
+  into actions, and applying `state.focus` to the DOM (the focus contract,
+  spec §6). It computes nothing about documents or carets itself.
+  Dispatches from discrete events flush subscribers synchronously, so the
+  focus contract's same-call-stack guarantee survives the store
+  indirection.
 - **Skin** owns presentation: layout, theming, viewport/keyboard handling,
   toolbar markup. The demo skin is a reference consumer, not part of the
   library — it lives outside `src/` and imports only from `src/index.ts`,
@@ -203,3 +205,34 @@ by the id factory.
   violated.
 - Spec §11 open questions get answered in the spec (or here), not implied
   by code.
+
+## 7. API design principles
+
+How the owner judges this package's surface. Violations are findings on
+the same level as layer direction — review consumer code (the demo, and
+eventually Planner's adapter) against these, not just `src/`.
+
+1. **Consumer code is the spec.** The API is judged by what the calling
+   code looks like. If consuming a capability requires repeated wiring —
+   effect-plus-registration blocks, subscription calls whose return value
+   is discarded, threading store data through props — the surface is
+   missing a piece. Close the gap in the library; never document the
+   boilerplate as the pattern.
+2. **Two audiences, two complete layers.** React consumers get the
+   ergonomic layer (render-prop components, hooks); non-React hosts (e.g.
+   Planner's store layer) get the primitive layer (`applyExternal`, raw
+   registrations). "Hide the plumbing" applies per audience — the
+   primitives are not clutter, they are the other audience's surface.
+3. **React observes; it never owns.** State lives in the store instance.
+   Data flows in through `source`/`applyExternal` and out through
+   registrations — never through React props or component state. This is
+   what makes external updates unable to clobber the document.
+4. **The consumer contributes pure functions only** — mappers, folds,
+   render props, adapters, id factories: data in, data out. Lifecycle,
+   wiring, and invariants are the library's job, in both directions
+   across the boundary.
+5. **One obvious way.** No duplicate paths, no convenience aliases: a
+   second way to reach the same data or perform the same operation is a
+   finding, even when each path is individually reasonable (precedents:
+   `useNoteStore`/`useNoteState` → `useNote`; `toMarkdown` removed in
+   favor of `serialize`; raw reducer un-exported).
