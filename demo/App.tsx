@@ -19,18 +19,35 @@ function useVisualViewportBox() {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () =>
-      setBox({
-        height: vv.height,
-        offsetTop: vv.offsetTop,
-        keyboardOpen: window.innerHeight - vv.height > 100,
+    const update = () => {
+      // iOS "reveals" a newly focused field by scrolling the visual (and
+      // sometimes the layout) viewport, then often snaps back — even though
+      // this page has nothing to scroll. If the shell chases those nudges
+      // through React state it reacts a frame late and visibly jumps on
+      // every tap into a row. Pin the page scroll synchronously inside the
+      // event instead, then read the viewport.
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+      setBox((prev) => {
+        const next = {
+          height: vv.height,
+          offsetTop: vv.offsetTop,
+          keyboardOpen: window.innerHeight - vv.height > 100,
+        };
+        return prev.height === next.height &&
+          prev.offsetTop === next.offsetTop &&
+          prev.keyboardOpen === next.keyboardOpen
+          ? prev
+          : next;
       });
+    };
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
+    window.addEventListener('scroll', update);
     update();
     return () => {
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
+      window.removeEventListener('scroll', update);
     };
   }, []);
   return box;
