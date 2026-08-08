@@ -1,14 +1,13 @@
 import {
   useLayoutEffect,
   useRef,
-  useSyncExternalStore,
   type ClipboardEvent,
   type FocusEvent,
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
 import type { NoteStore } from "./store";
-import type { RowId } from "./types";
+import type { RowId, State } from "./types";
 
 const supportsFieldSizing =
   typeof CSS !== "undefined" && CSS.supports?.("field-sizing", "content");
@@ -30,12 +29,16 @@ function autosize(el: HTMLTextAreaElement) {
 
 /**
  * Internal: the DOM half of the editor — focus application, input
- * translation, composition guards, autosize. Subscribes to the store
- * itself; event handlers read store.getState() at event time, so they can
- * never act on a stale snapshot.
+ * translation, composition guards, autosize. The caller (Editor) passes
+ * the subscribed state it already renders from; event handlers read
+ * store.getState() at event time, so they can never act on a stale
+ * snapshot.
  */
-export function useEditorBindings(store: NoteStore, scrollOnFocus = true) {
-  const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+export function useEditorBindings(
+  store: NoteStore,
+  state: State,
+  scrollOnFocus = true,
+) {
   const dispatch = store.dispatch;
   const refs = useRef(new Map<RowId, HTMLTextAreaElement>());
   const composing = useRef(false);
@@ -294,5 +297,5 @@ export function useEditorBindings(store: NoteStore, scrollOnFocus = true) {
     };
   }
 
-  return { state, getRowProps, getCheckboxProps };
+  return { getRowProps, getCheckboxProps };
 }

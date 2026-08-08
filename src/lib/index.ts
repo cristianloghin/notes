@@ -2,7 +2,7 @@
 // this directory is an implementation detail — consumers, including the
 // demo, import only from here.
 export { NoteStore } from "./store";
-export { NoteProvider, useNoteStore, useNoteState } from "./context";
+export { NoteProvider, useNote } from "./context";
 export {
   Editor,
   type EditorRowRenderProps,

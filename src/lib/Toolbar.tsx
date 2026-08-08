@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useNoteState, useNoteStore } from "./context";
+import { useNote } from "./context";
 import type { Row } from "./types";
 
 export type ToolbarRenderProps = {
@@ -32,8 +32,8 @@ export function Toolbar({
   className?: string;
   style?: CSSProperties;
 }) {
-  const store = useNoteStore();
-  const { rows, focus } = useNoteState();
+  const { store, state } = useNote();
+  const { rows, focus } = state;
 
   const activeIndex = focus ? rows.findIndex((r) => r.id === focus.id) : -1;
   const activeRow = activeIndex >= 0 ? rows[activeIndex] : null;

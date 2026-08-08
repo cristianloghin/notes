@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NoteProvider, NoteStore, serialize, useNoteState } from "../src/lib";
+import { NoteProvider, NoteStore, serialize, useNote } from "../src/lib";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
@@ -55,8 +55,8 @@ Ask at the store which primer works on old plaster.`;
 
 /** Live markdown view: subscribes to the rows and serializes them. */
 function MarkdownPreview() {
-  const { rows } = useNoteState();
-  return <pre className="md-preview">{serialize(rows)}</pre>;
+  const { state } = useNote();
+  return <pre className="md-preview">{serialize(state.rows)}</pre>;
 }
 
 export default function App() {

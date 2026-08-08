@@ -25,17 +25,20 @@ export function NoteProvider({
   return <NoteContext.Provider value={store}>{children}</NoteContext.Provider>;
 }
 
-/** The store instance from context. Throws outside a NoteProvider. */
-export function useNoteStore(): NoteStore {
+/**
+ * The one hook: the store from context (for dispatching) plus its state,
+ * subscribed — the component re-renders on every state change. Throws
+ * outside a NoteProvider.
+ */
+export function useNote(): { store: NoteStore; state: State } {
   const store = useContext(NoteContext);
   if (!store) {
-    throw new Error("useNoteStore: no NoteProvider found above this component");
+    throw new Error("useNote: no NoteProvider found above this component");
   }
-  return store;
-}
-
-/** Subscribe to the store's state; re-renders on every state change. */
-export function useNoteState(): State {
-  const store = useNoteStore();
-  return useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  const state = useSyncExternalStore(
+    store.subscribe,
+    store.getState,
+    store.getState,
+  );
+  return { store, state };
 }

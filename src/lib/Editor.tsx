@@ -1,6 +1,6 @@
 import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { useEditorBindings } from "./bindings";
-import { useNoteStore } from "./context";
+import { useNote } from "./context";
 import type { Row } from "./types";
 
 type Bindings = ReturnType<typeof useEditorBindings>;
@@ -44,9 +44,10 @@ export function Editor({
       true). Set false if the host owns all scrolling. */
   scrollOnFocus?: boolean;
 }) {
-  const store = useNoteStore();
-  const { state, getRowProps, getCheckboxProps } = useEditorBindings(
+  const { store, state } = useNote();
+  const { getRowProps, getCheckboxProps } = useEditorBindings(
     store,
+    state,
     scrollOnFocus,
   );
   return (

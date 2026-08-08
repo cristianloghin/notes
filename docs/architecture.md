@@ -89,7 +89,7 @@ earned through a bug.
 
 Declared in `src/lib/index.ts`:
 
-- `NoteStore`, `NoteProvider`, `useNoteStore`, `useNoteState`
+- `NoteStore`, `NoteProvider`, `useNote`
 - `Editor`, `Toolbar`, `reducer`, `createInitialState`
 - `parseMarkdown`, `serialize`
 - The types: `Row`, `RowId`, `Caret`, `State`, `Action` (and row variants,
