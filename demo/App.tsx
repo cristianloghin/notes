@@ -3,6 +3,8 @@ import { NoteProvider, NoteStore, serialize } from "../src";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
+import { plannerToRows, rowsToPlanner } from "./planner/adapter";
+import { SAMPLE_PLANNER, type PlannerItem } from "./planner/data";
 import "./styles.css";
 
 // DEBUG: on-screen event log (visual viewport, scrolls, focus) so a jump on
@@ -42,16 +44,10 @@ function useKeyboardDock() {
   return { ref, keyboardOpen };
 }
 
-const SAMPLE = `# Hardware
-Check the garage before buying any of this.
-- [ ] screws
-- [x] hinges
-- [ ] wood glue
-
-# Paint
-- [ ] primer
-- [ ] rollers
-Ask at the store which primer works on old plaster.`;
+// The demo's "database": a Planner-shaped list (list_item rows). The note
+// is READ from this shape and every edit is SAVED back to it through the
+// row-grain adapter — no markdown in between.
+const INITIAL_ROWS = plannerToRows(SAMPLE_PLANNER);
 
 /**
  * Lives OUTSIDE the NoteProvider — no store, no context, no subscription.
@@ -63,14 +59,48 @@ function MarkdownPreview({ markdown }: { markdown: string }) {
   return <pre className="md-preview">{markdown}</pre>;
 }
 
+/** The Planner-shaped data, as the adapter writes it back. Also outside
+    the provider — fed purely by the onRowsChange → adapter pipeline. */
+function PlannerPreview({ items }: { items: PlannerItem[] }) {
+  return (
+    <div>
+      <pre className="md-preview">{JSON.stringify(items, null, 2)}</pre>
+      <p className="hint">
+        Planner list_item shape. personId / dueOn / createdAt are preserved
+        by id; new rows get host-minted ids; paragraph rows save as
+        unchecked items (Planner Lists have no prose rows).
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
-  const [showMarkdown, setShowMarkdown] = useState(false);
-  // Seeded with the source markdown (it round-trips identically); after
-  // that, updated exclusively through the store's onRowsChange listener.
-  const [markdown, setMarkdown] = useState(SAMPLE);
-  const [note] = useState(() => new NoteStore({ initial: SAMPLE }));
+  const [panel, setPanel] = useState<"none" | "md" | "planner">("none");
+  const [markdown, setMarkdown] = useState(() => serialize(INITIAL_ROWS));
+  const [plannerItems, setPlannerItems] = useState(SAMPLE_PLANNER);
+  // Latest saved Planner state, so each save can preserve metadata by id.
+  const plannerRef = useRef(SAMPLE_PLANNER);
+  const [note] = useState(
+    () =>
+      new NoteStore({
+        initial: INITIAL_ROWS,
+        // The host mints DB-compatible ids for rows created in the editor.
+        genId: () => `db-${crypto.randomUUID().slice(0, 8)}`,
+      }),
+  );
+  // Two independent consumers of the same seam: the markdown view and the
+  // Planner-shaped "database".
   useEffect(
     () => note.onRowsChange((rows) => setMarkdown(serialize(rows))),
+    [note],
+  );
+  useEffect(
+    () =>
+      note.onRowsChange((rows) => {
+        const next = rowsToPlanner(rows, plannerRef.current);
+        plannerRef.current = next;
+        setPlannerItems(next);
+      }),
     [note],
   );
   const dock = useKeyboardDock();
@@ -114,9 +144,18 @@ export default function App() {
               <button
                 className="bar-btn"
                 onPointerDown={(e) => e.preventDefault()}
-                onClick={() => setShowMarkdown((v) => !v)}
+                onClick={() => setPanel((p) => (p === "md" ? "none" : "md"))}
               >
-                {showMarkdown ? "Hide MD" : "Show MD"}
+                MD
+              </button>
+              <button
+                className="bar-btn"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() =>
+                  setPanel((p) => (p === "planner" ? "none" : "planner"))
+                }
+              >
+                Planner
               </button>
               <button
                 className="bar-btn"
@@ -125,7 +164,7 @@ export default function App() {
                   navigator.clipboard.writeText(serialize(note.getState().rows))
                 }
               >
-                Copy MD
+                Copy
               </button>
             </div>
           </header>
@@ -144,7 +183,8 @@ export default function App() {
             of a line also makes a heading
           </p>
 
-          {showMarkdown && <MarkdownPreview markdown={markdown} />}
+          {panel === "md" && <MarkdownPreview markdown={markdown} />}
+          {panel === "planner" && <PlannerPreview items={plannerItems} />}
         </div>
       </div>
       <div
