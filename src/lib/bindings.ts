@@ -1,16 +1,14 @@
 import {
-  useEffect,
   useLayoutEffect,
-  useReducer,
   useRef,
+  useSyncExternalStore,
   type ClipboardEvent,
   type FocusEvent,
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
-import { serialize } from "./markdown";
-import { createInitialState, reducer } from "./reducer";
-import type { Action, Row, RowId } from "./types";
+import type { ChecklistStore } from "./store";
+import type { RowId } from "./types";
 
 const supportsFieldSizing =
   typeof CSS !== "undefined" && CSS.supports?.("field-sizing", "content");
@@ -30,29 +28,23 @@ function autosize(el: HTMLTextAreaElement) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-export function useChecklist(options?: {
-  initial?: Row[] | string;
-  onChange?: (rows: Row[]) => void;
-  /** Reveal the focused row after model-side focus placement (default true).
-      Set false to disable the hook's only scroll call. */
-  scrollOnFocus?: boolean;
-}) {
-  const [state, dispatch] = useReducer(
-    reducer,
-    options?.initial,
-    createInitialState,
-  );
+/**
+ * Internal: the DOM half of the editor — focus application, input
+ * translation, composition guards, autosize. Subscribes to the store
+ * itself; event handlers read store.getState() at event time, so they can
+ * never act on a stale snapshot.
+ */
+export function useEditorBindings(
+  store: ChecklistStore,
+  scrollOnFocus = true,
+) {
+  const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  const dispatch = store.dispatch;
   const refs = useRef(new Map<RowId, HTMLTextAreaElement>());
   const composing = useRef(false);
   // True while the layout effect is applying focus to the DOM, so the focus
   // events that application fires are not echoed back as passive syncs.
   const applyingFocus = useRef(false);
-
-  const onChangeRef = useRef(options?.onChange);
-  onChangeRef.current = options?.onChange;
-  useEffect(() => {
-    onChangeRef.current?.(state.rows);
-  }, [state.rows]);
 
   // Focus contract (spec §6): applied in useLayoutEffect so it stays inside
   // the originating discrete event's synchronous flush — deferring would
@@ -81,10 +73,10 @@ export function useChecklist(options?: {
     } finally {
       applyingFocus.current = false;
     }
-    if (options?.scrollOnFocus !== false) {
+    if (scrollOnFocus) {
       el.scrollIntoView({ block: "nearest" });
     }
-  }, [state.focus]);
+  }, [state.focus, scrollOnFocus]);
 
   // Auto-grow fallback where `field-sizing: content` is unsupported.
   useLayoutEffect(() => {
@@ -156,8 +148,7 @@ export function useChecklist(options?: {
   }
 
   function getRowProps(id: RowId) {
-    const index = state.rows.findIndex((r) => r.id === id);
-    const row = state.rows[index];
+    const row = state.rows.find((r) => r.id === id);
     return {
       ref: makeRef(id),
       value: row?.text ?? "",
@@ -168,11 +159,12 @@ export function useChecklist(options?: {
       onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const text = e.currentTarget.value;
         const caret = e.currentTarget.selectionStart;
+        const current = store.getState().rows.find((r) => r.id === id);
         // Input translation, like Enter → split: "# " at the start of an
         // item or paragraph triggers header promotion; the reducer owns it.
         if (
-          row != null &&
-          row.type !== "header" &&
+          current != null &&
+          current.type !== "header" &&
           text.startsWith("# ") &&
           !text.includes("\n") &&
           !composing.current
@@ -205,11 +197,13 @@ export function useChecklist(options?: {
           // At offset 0 the deletion is a no-op, so beforeinput never fires —
           // merge must be detected here. Android IMEs that report 229 /
           // "Unidentified" instead of "Backspace" fall through to the
-          // beforeinput handler below.
+          // beforeinput handler.
           e.preventDefault();
           dispatch({ type: "mergeBackward", id });
           return;
         }
+        const rows = store.getState().rows;
+        const index = rows.findIndex((r) => r.id === id);
         if (
           e.key === "ArrowUp" &&
           el.selectionStart === 0 &&
@@ -217,8 +211,7 @@ export function useChecklist(options?: {
         ) {
           if (index > 0) {
             e.preventDefault();
-            const prev = state.rows[index - 1];
-            dispatch({ type: "focusRow", id: prev.id, offset: 0 });
+            dispatch({ type: "focusRow", id: rows[index - 1].id, offset: 0 });
           }
           return;
         }
@@ -227,9 +220,9 @@ export function useChecklist(options?: {
           el.selectionStart === el.value.length &&
           el.selectionEnd === el.value.length
         ) {
-          if (index < state.rows.length - 1) {
+          if (index >= 0 && index < rows.length - 1) {
             e.preventDefault();
-            const next = state.rows[index + 1];
+            const next = rows[index + 1];
             dispatch({
               type: "focusRow",
               id: next.id,
@@ -251,19 +244,18 @@ export function useChecklist(options?: {
       onCompositionEnd: () => {
         composing.current = false;
       },
-      // Passive caret sync: user-driven focus and caret moves (taps, arrow
-      // keys within a row) are reported into state so state.focus is always
-      // current — actions never read the DOM. Guarded against echoes of our
-      // own focus application; non-collapsed selections are not reported
-      // (collapsing them via re-application would break text selection).
+      // Passive caret sync: user-driven focus and caret moves are reported
+      // into state so state.focus is always current — actions never read
+      // the DOM. Guarded against echoes of our own focus application;
+      // non-collapsed selections are never reported (collapsing them via
+      // re-application would break text selection).
       onFocus: (e: FocusEvent<HTMLTextAreaElement>) => {
         // iOS Safari always scrolls to "reveal" a focused field — even one
         // already fully visible — and exposes no way to prevent it; that
-        // misfiring reveal is the intermittent viewport jump when moving the
+        // misfiring reveal is an intermittent viewport jump when moving the
         // caret between rows. Safari skips the reveal entirely when the
-        // field has opacity 0 at the moment it computes the scroll, so blink
-        // it for one task (restored before paint; imperceptible). Revealing
-        // is then fully owned by this library/skin via scrollOnFocus.
+        // field has opacity 0 at the moment it computes the scroll, so
+        // blink it for one task (restored before paint; imperceptible).
         const el = e.currentTarget;
         const prevOpacity = el.style.opacity;
         el.style.opacity = "0";
@@ -282,11 +274,8 @@ export function useChecklist(options?: {
         if (applyingFocus.current || composing.current) return;
         const el = e.currentTarget;
         if (el.selectionStart !== el.selectionEnd) return;
-        if (
-          state.focus &&
-          state.focus.id === id &&
-          state.focus.offset === el.selectionStart
-        ) {
+        const focus = store.getState().focus;
+        if (focus && focus.id === id && focus.offset === el.selectionStart) {
           return;
         }
         dispatch({
@@ -308,17 +297,5 @@ export function useChecklist(options?: {
     };
   }
 
-  function getContainerProps() {
-    return {};
-  }
-
-  return {
-    rows: state.rows,
-    focus: state.focus,
-    dispatch: dispatch as (action: Action) => void,
-    getRowProps,
-    getCheckboxProps,
-    getContainerProps,
-    toMarkdown: () => serialize(state.rows),
-  };
+  return { state, getRowProps, getCheckboxProps };
 }

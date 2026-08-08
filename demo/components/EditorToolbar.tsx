@@ -1,21 +1,13 @@
-import { Action, Caret, Row, Toolbar } from "../../src/lib";
+import { Toolbar } from "../../src/lib";
 
 /* Accessory toolbar, rendered inside the fixed .toolbar-dock (App.tsx),
   which is the only keyboard-tracking element in the layout. The Toolbar
-  component owns the pointerdown guard (spec §6); this render prop owns
-  all presentation. */
+  component owns the pointerdown guard (spec §6) and reads the store from
+  context; this render prop owns all presentation. */
 
-export const EditorToolbar = ({
-  rows,
-  focus,
-  dispatch,
-}: {
-  rows: Row[];
-  focus: Caret | null;
-  dispatch: (action: Action) => void;
-}) => {
+export const EditorToolbar = () => {
   return (
-    <Toolbar rows={rows} focus={focus} dispatch={dispatch} className="toolbar">
+    <Toolbar className="toolbar">
       {({ activeRow, canMoveUp, canMoveDown, setRowType, moveRow }) => (
         <div className="toolbar-inner">
           <div className="tb-seg" role="group" aria-label="Row type">

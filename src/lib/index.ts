@@ -1,16 +1,21 @@
 // Public surface of the library (architecture.md §3). Everything else in
 // this directory is an implementation detail — consumers, including the
 // demo, import only from here.
-export { useChecklist } from './useChecklist';
+export { ChecklistStore } from "./store";
+export {
+  ChecklistProvider,
+  useChecklistStore,
+  useChecklistState,
+} from "./context";
 export {
   Editor,
   type EditorRowRenderProps,
   type FieldProps,
   type CheckboxProps,
-} from './Editor';
-export { Toolbar, type ToolbarRenderProps } from './Toolbar';
-export { reducer, createInitialState } from './reducer';
-export { parseMarkdown, serialize } from './markdown';
+} from "./Editor";
+export { Toolbar, type ToolbarRenderProps } from "./Toolbar";
+export { reducer, createInitialState } from "./reducer";
+export { parseMarkdown, serialize } from "./markdown";
 export type {
   Row,
   RowId,
@@ -20,4 +25,4 @@ export type {
   Caret,
   State,
   Action,
-} from './types';
+} from "./types";

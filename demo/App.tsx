@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { useChecklist } from "../src/lib";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  ChecklistProvider,
+  ChecklistStore,
+  useChecklistState,
+  useChecklistStore,
+} from "../src/lib";
 import { DebugHud } from "./components/DebugHud";
+import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
 import "./styles.css";
 
@@ -52,111 +58,93 @@ Check the garage before buying any of this.
 - [ ] rollers
 Ask at the store which primer works on old plaster.`;
 
+/** Live markdown view — subscribes so it stays current while typing. */
+function MarkdownPreview() {
+  useChecklistState();
+  const store = useChecklistStore();
+  return <pre className="md-preview">{store.toMarkdown()}</pre>;
+}
+
 export default function App() {
   const [showMarkdown, setShowMarkdown] = useState(false);
-  const { rows, focus, dispatch, getRowProps, getCheckboxProps, toMarkdown } =
-    useChecklist({ initial: SAMPLE });
+  const [checklist] = useState(() => new ChecklistStore({ initial: SAMPLE }));
   const dock = useKeyboardDock();
+  const shellRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const obs = (vv: VisualViewport | null) => {
+      if (!vv) return;
+
+      const height = vv.height + vv.offsetTop;
+
+      const shell = shellRef.current;
+      if (!shell || shell.getBoundingClientRect().height === height) return;
+
+      // shell.style.height = height + "px";
+    };
+
+    const listener = (e: VisualViewportEventMap["scroll" | "resize"]) => {
+      console.log(e);
+      obs(e.target as VisualViewport | null);
+    };
+
+    window.visualViewport?.addEventListener("scroll", listener);
+    window.visualViewport?.addEventListener("resize", listener);
+    obs(window.visualViewport);
+
+    return () => {
+      window.visualViewport?.removeEventListener("scroll", listener);
+      window.visualViewport?.removeEventListener("resize", listener);
+    };
+  }, []);
 
   return (
-    <div className="shell">
-      {DEBUG_HUD && <DebugHud />}
-      <div className="scroll-area">
-        <div className="app">
-          <header className="topbar">
-            <h1>Checklist POC</h1>
-            <div className="topbar-actions">
-              <button
-                className="bar-btn"
-                onPointerDown={(e) => e.preventDefault()}
-                onClick={() => setShowMarkdown((v) => !v)}
-              >
-                {showMarkdown ? "Hide MD" : "Show MD"}
-              </button>
-              <button
-                className="bar-btn"
-                onPointerDown={(e) => e.preventDefault()}
-                onClick={() => navigator.clipboard.writeText(toMarkdown())}
-              >
-                Copy MD
-              </button>
-            </div>
-          </header>
-
-          <div className="editor" role="list">
-            {rows.map((row) =>
-              row.type === "header" ? (
-                <div className="row row-header" key={row.id} role="listitem">
-                  <textarea
-                    className="field field-header"
-                    aria-label="Section header"
-                    {...getRowProps(row.id)}
-                  />
-                </div>
-              ) : row.type === "text" ? (
-                <div className="row row-text" key={row.id} role="listitem">
-                  <textarea
-                    className="field field-text"
-                    aria-label="Paragraph"
-                    {...getRowProps(row.id)}
-                  />
-                </div>
-              ) : (
-                <div
-                  className={`row row-item${row.done ? " is-done" : ""}`}
-                  key={row.id}
-                  role="listitem"
+    <ChecklistProvider checklist={checklist}>
+      <div className="shell" ref={shellRef}>
+        {DEBUG_HUD && <DebugHud />}
+        <div className="scroll-area">
+          <div className="app">
+            <header className="topbar">
+              <h1>Checklist POC</h1>
+              <div className="topbar-actions">
+                <button
+                  className="bar-btn"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => setShowMarkdown((v) => !v)}
                 >
-                  <button
-                    className="check"
-                    aria-label={row.done ? "Mark not done" : "Mark done"}
-                    aria-pressed={row.done}
-                    {...getCheckboxProps(row.id)}
-                  >
-                    {row.done ? (
-                      <svg
-                        viewBox="0 0 16 16"
-                        width="12"
-                        height="12"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M2.5 8.5l3.5 3.5 7-8"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    ) : null}
-                  </button>
-                  <textarea
-                    className="field field-item"
-                    aria-label="Checklist item"
-                    {...getRowProps(row.id)}
-                  />
-                </div>
-              ),
-            )}
+                  {showMarkdown ? "Hide MD" : "Show MD"}
+                </button>
+                <button
+                  className="bar-btn"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() =>
+                    navigator.clipboard.writeText(checklist.toMarkdown())
+                  }
+                >
+                  Copy MD
+                </button>
+              </div>
+            </header>
+
+            <EditorText />
+
+            <p className="hint">
+              Enter → next item · Enter on an empty item → plain text ·
+              Backspace at start → merge · tap circle → toggle · paste
+              multi-line markdown to import · <code>#&nbsp;</code> at the start
+              of a line also makes a heading
+            </p>
+
+            {showMarkdown && <MarkdownPreview />}
           </div>
-
-          <p className="hint">
-            Enter → next item · Enter on an empty item → plain text · Backspace
-            at start → merge · tap circle → toggle · paste multi-line markdown
-            to import · <code>#&nbsp;</code> at the start of a line also makes a
-            heading
-          </p>
-
-          {showMarkdown && <pre className="md-preview">{toMarkdown()}</pre>}
+        </div>
+        <div
+          className={`toolbar-dock${dock.keyboardOpen ? " kb-open" : ""}`}
+          ref={dock.ref}
+        >
+          <EditorToolbar />
         </div>
       </div>
-      <div
-        className={`toolbar-dock${dock.keyboardOpen ? " kb-open" : ""}`}
-        ref={dock.ref}
-      >
-        <EditorToolbar rows={rows} focus={focus} dispatch={dispatch} />
-      </div>
-    </div>
+    </ChecklistProvider>
   );
 }

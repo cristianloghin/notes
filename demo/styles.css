@@ -44,26 +44,13 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
-/* App shell: fully static — JS never sizes or translates it (a reactive
-   shell is what made the layout jump on focus changes). The page never
-   scrolls; .scroll-area does, and only the toolbar dock tracks the
-   keyboard. */
 .shell {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
   height: 100dvh;
-  display: flex;
-  flex-direction: column;
+  overflow: scroll;
 }
 
 .scroll-area {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  
 }
 
 .app {

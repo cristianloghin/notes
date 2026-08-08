@@ -1,13 +1,14 @@
 import { Fragment, type CSSProperties, type ReactNode } from "react";
+import { useEditorBindings } from "./bindings";
+import { useChecklistStore } from "./context";
 import type { Row } from "./types";
-import type { useChecklist } from "./useChecklist";
 
-type ChecklistApi = ReturnType<typeof useChecklist>;
+type Bindings = ReturnType<typeof useEditorBindings>;
 
 /** Props to spread onto a row's textarea. */
-export type FieldProps = ReturnType<ChecklistApi["getRowProps"]>;
+export type FieldProps = ReturnType<Bindings["getRowProps"]>;
 /** Props to spread onto an item's done-toggle control. */
-export type CheckboxProps = ReturnType<ChecklistApi["getCheckboxProps"]>;
+export type CheckboxProps = ReturnType<Bindings["getCheckboxProps"]>;
 
 export type EditorRowRenderProps = {
   row: Row;
@@ -20,35 +21,36 @@ export type EditorRowRenderProps = {
 };
 
 /**
- * Headless editor body: maps rows to a render-prop child that owns all
- * presentation, mirroring Toolbar. The component owns two invariants so no
- * skin can break them:
+ * Headless editor body. Reads the store from ChecklistContext and wires the
+ * DOM bindings (focus contract, input translation, autosize) internally —
+ * no props to thread. A render-prop child owns all presentation, mirroring
+ * Toolbar. The component owns two invariants no skin may break:
  *
  * - Rows are keyed by row id, never by array index — index keys misplace
  *   focus on the first reorder (spec §7).
  * - The container carries list semantics (role="list").
- *
- * The child receives the assembled per-row props; render any structure
- * around them.
  */
 export function Editor({
-  rows,
-  getRowProps,
-  getCheckboxProps,
   children,
   className,
   style,
+  scrollOnFocus,
 }: {
-  rows: Row[];
-  getRowProps: ChecklistApi["getRowProps"];
-  getCheckboxProps: ChecklistApi["getCheckboxProps"];
   children: (props: EditorRowRenderProps) => ReactNode;
   className?: string;
   style?: CSSProperties;
+  /** Reveal the focused row after model-side focus placement (default
+      true). Set false if the host owns all scrolling. */
+  scrollOnFocus?: boolean;
 }) {
+  const store = useChecklistStore();
+  const { state, getRowProps, getCheckboxProps } = useEditorBindings(
+    store,
+    scrollOnFocus,
+  );
   return (
     <div className={className} style={style} role="list">
-      {rows.map((row, index) => (
+      {state.rows.map((row, index) => (
         <Fragment key={row.id}>
           {children({
             row,

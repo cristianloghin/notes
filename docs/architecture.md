@@ -14,16 +14,22 @@ Three layers, dependencies point strictly downward:
 ```
 demo/       skin        (App.tsx, styles.css, main.tsx — outside the package)
     │
-src/lib/    binding     (useChecklist.ts, Editor.tsx, Toolbar.tsx, index.ts)
-    │
-src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts)
+src/lib/    binding     (context.tsx, bindings.ts, Editor.tsx, Toolbar.tsx,
+    │                    index.ts)
+src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts, store.ts)
 ```
 
 - **Core** is pure TypeScript: no React, no DOM, no browser globals. The
-  reducer is the product; everything else is delivery.
-- **Binding** owns exactly two jobs: translating DOM input events into
-  actions, and applying `state.focus` to the DOM (the focus contract,
-  spec §6). It computes nothing about documents or carets itself.
+  reducer is the product; `ChecklistStore` is its thin observable wrapper —
+  state lives in the instance, components subscribe. Consumers create the
+  instance and hand it to `ChecklistProvider`; nothing else is threaded
+  through props.
+- **Binding** owns exactly three jobs: providing the store through context
+  (`useSyncExternalStore`), translating DOM input events into actions, and
+  applying `state.focus` to the DOM (the focus contract, spec §6). It
+  computes nothing about documents or carets itself. Dispatches from
+  discrete events flush subscribers synchronously, so the focus contract's
+  same-call-stack guarantee survives the store indirection.
 - **Skin** owns presentation: layout, theming, viewport/keyboard handling,
   toolbar markup. The demo skin is a reference consumer, not part of the
   library — it lives outside `src/` and imports only from `src/lib/index.ts`,
@@ -80,11 +86,17 @@ earned through a bug.
 
 Declared in `src/lib/index.ts`:
 
-- `useChecklist`, `Editor`, `Toolbar`, `reducer`, `createInitialState`
+- `ChecklistStore`, `ChecklistProvider`, `useChecklistStore`,
+  `useChecklistState`
+- `Editor`, `Toolbar`, `reducer`, `createInitialState`
 - `parseMarkdown`, `serialize`
 - The types: `Row`, `RowId`, `Caret`, `State`, `Action` (and row variants,
   `ToolbarRenderProps`, `EditorRowRenderProps`, `FieldProps`,
   `CheckboxProps`)
+
+`useChecklist` is gone: the hook owned state, DOM glue, and API surface in
+one closure, which forced prop-threading into every component. The store
+instance + context split replaced it (2026-08).
 
 `id.ts` is an implementation detail and stays private. The `Action` union
 has deliberately drifted from spec §10 (`promoteHeader`, `pasteText`,
