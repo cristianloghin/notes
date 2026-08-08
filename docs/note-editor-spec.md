@@ -1,6 +1,7 @@
-# Checklist Editor — Library Spec
+# Note Editor — Library Spec
 
-> Working title. A mobile-first React library for fast entry of checklists grouped under headers.
+> A mobile-first React library ("Notes") for fast entry of notes: checklist
+> items and plain-text paragraphs grouped under headers.
 
 **Status:** draft · **Target:** React 18+, TypeScript
 

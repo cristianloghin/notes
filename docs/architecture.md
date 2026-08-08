@@ -1,7 +1,7 @@
 # Architecture
 
 Structural rules for this repository. The product spec —
-[checklist-editor-spec.md](checklist-editor-spec.md) — defines *what* the
+[note-editor-spec.md](note-editor-spec.md) — defines *what* the
 library does; this document defines *how the code is allowed to be shaped*.
 The architecture reviewer judges changes against both: the spec for intent,
 this file for boundaries. When the two disagree, flag it — don't silently
