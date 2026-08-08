@@ -1,32 +1,54 @@
 import { useEffect, useRef, useState } from "react";
-import type { NoteStore } from "../core/store";
-import type { Action, Row } from "../core/types";
+import { NoteStore } from "../core/store";
+import type { Action, GenId, Row } from "../core/types";
 
 /**
- * React binding for the store's `onRowsChange` seam: maps edit-driven rows
- * changes into client-shaped React state. The mapper receives the rows and
- * the previous mapped value (for adapters that preserve client-side data
- * across saves). Seeded eagerly from the store's current rows with
- * `previous` undefined.
- *
- * Same semantics as the seam itself: fires for edits made through the
- * store, never for caret-only updates or external pushes. For a plain
- * derived view of the document (including pushes), derive from
- * `useNote().state` instead.
+ * Constructs a NoteStore whose lifetime is the owning component's: created
+ * once, `dispose()`d on unmount (StrictMode's mount–unmount–remount cycle
+ * is handled — the store is recreated if the dev-only cleanup disposed
+ * it). Options are captured at creation; later changes are ignored.
+ */
+export function useNoteStore(options?: {
+  initial?: Row[] | string;
+  genId?: GenId;
+}): NoteStore {
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const [store, setStore] = useState(() => new NoteStore(optionsRef.current));
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  useEffect(() => {
+    let active = storeRef.current;
+    if (active.isDisposed()) {
+      active = new NoteStore(optionsRef.current);
+      setStore(active);
+    }
+    return () => active.dispose();
+  }, []);
+  return store;
+}
+
+/**
+ * PERSISTENCE seam, not a view feed: maps edit-driven rows changes into
+ * client-shaped React state — the rows-only projection of the store's
+ * `onAction`. Fires for edits made through the store, never for
+ * caret-only updates or external pushes; a *view* of the document
+ * (which must also reflect pushes) derives from `useNote().state`
+ * instead. The mapper receives the rows and the previous mapped value
+ * (for adapters that preserve client-side data across saves).
  */
 export function useOnRowsChange<T>(
   store: NoteStore,
-  map: (rows: Row[], previous: T | undefined) => T,
+  map: (rows: Row[], previous: T) => T,
+  initial: T | (() => T),
 ): T {
   const mapRef = useRef(map);
   mapRef.current = map;
-  const [value, setValue] = useState<T>(() =>
-    map(store.getState().rows, undefined),
-  );
+  const [value, setValue] = useState<T>(initial);
   useEffect(
     () =>
-      store.onRowsChange((rows) =>
-        setValue((previous) => mapRef.current(rows, previous)),
+      store.onAction((_action, _prevRows, nextRows) =>
+        setValue((previous) => mapRef.current(nextRows, previous)),
       ),
     [store],
   );

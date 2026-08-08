@@ -38,42 +38,7 @@ describe("NoteStore", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  describe("onRowsChange", () => {
-    it("fires registered listeners on rows changes, after subscribers", () => {
-      const order: string[] = [];
-      const store = new NoteStore({ initial: "- [ ] b" });
-      store.subscribe(() => order.push("subscriber"));
-      const rowsListener = vi.fn(() => order.push("rows"));
-      store.onRowsChange(rowsListener);
-      const id = store.getState().rows[0].id;
-
-      store.dispatch({ type: "setText", id, text: "bb", caret: 2 });
-      expect(rowsListener).toHaveBeenCalledTimes(1);
-      expect(rowsListener).toHaveBeenCalledWith(store.getState().rows);
-      expect(order).toEqual(["subscriber", "rows"]);
-    });
-
-    it("does not fire for caret-only updates", () => {
-      const store = new NoteStore({ initial: "- [ ] bb" });
-      const rowsListener = vi.fn();
-      store.onRowsChange(rowsListener);
-      const id = store.getState().rows[0].id;
-      store.dispatch({ type: "focusRow", id, offset: 1 });
-      store.dispatch({ type: "focusRow", id, offset: 2, origin: "dom" });
-      expect(rowsListener).not.toHaveBeenCalled();
-    });
-
-    it("returns an unsubscribe function", () => {
-      const store = new NoteStore({ initial: "- [ ] b" });
-      const rowsListener = vi.fn();
-      const unsubscribe = store.onRowsChange(rowsListener);
-      unsubscribe();
-      store.dispatch({ type: "toggleDone", id: store.getState().rows[0].id });
-      expect(rowsListener).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("onAction", () => {
+  describe("onAction — the edits-out seam", () => {
     it("fires with the action and both row snapshots when rows changed", () => {
       const store = new NoteStore({ initial: "- [ ] a" });
       const listener = vi.fn();
@@ -101,14 +66,13 @@ describe("NoteStore", () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it("fires between subscribers and rows listeners", () => {
+    it("fires after subscribers", () => {
       const order: string[] = [];
       const store = new NoteStore({ initial: "- [ ] a" });
       store.subscribe(() => order.push("subscriber"));
-      store.onRowsChange(() => order.push("rows"));
       store.onAction(() => order.push("action"));
       store.dispatch({ type: "toggleDone", id: store.getState().rows[0].id });
-      expect(order).toEqual(["subscriber", "action", "rows"]);
+      expect(order).toEqual(["subscriber", "action"]);
     });
 
     it("returns an unsubscribe function", () => {
@@ -121,53 +85,28 @@ describe("NoteStore", () => {
     });
   });
 
-  describe("source / applyExternal", () => {
-    it("loads initial data through the push channel", () => {
-      const store = new NoteStore({
-        source: (push) => {
-          push([{ id: "x1", type: "item", text: "from host", done: false }]);
-        },
+  describe("connect / applyExternal — the data-in channel", () => {
+    it("loads initial data through the connected source's push", () => {
+      const store = new NoteStore();
+      store.connect((push) => {
+        push([{ id: "x1", type: "item", text: "from host", done: false }]);
       });
       expect(store.getState().rows).toEqual([
         { id: "x1", type: "item", text: "from host", done: false },
       ]);
     });
 
-    it("notifies subscribers but never rows listeners", () => {
+    it("applyExternal notifies subscribers but never action listeners", () => {
       const store = new NoteStore({ initial: "- [ ] a" });
       const subscriber = vi.fn();
-      const rowsListener = vi.fn();
+      const actionListener = vi.fn();
       store.subscribe(subscriber);
-      store.onRowsChange(rowsListener);
+      store.onAction(actionListener);
       store.applyExternal([
         { id: "x1", type: "item", text: "pushed", done: true },
       ]);
       expect(subscriber).toHaveBeenCalledTimes(1);
-      expect(rowsListener).not.toHaveBeenCalled();
-    });
-
-    it("preserves focus by row id and clamps the caret", () => {
-      const store = new NoteStore({
-        initial: [{ id: "x1", type: "item", text: "long text here", done: false }],
-      });
-      store.dispatch({ type: "focusRow", id: "x1", offset: 14 });
-      store.applyExternal([
-        { id: "x1", type: "item", text: "short", done: false },
-      ]);
-      expect(store.getState().focus).toEqual({ id: "x1", offset: 5 });
-      // fresh model-origin object so the view re-applies the caret
-      expect(store.getState().focus).not.toHaveProperty("origin");
-    });
-
-    it("drops focus when the focused row vanished", () => {
-      const store = new NoteStore({
-        initial: [{ id: "x1", type: "item", text: "a", done: false }],
-      });
-      store.dispatch({ type: "focusRow", id: "x1", offset: 1 });
-      store.applyExternal([
-        { id: "x2", type: "item", text: "b", done: false },
-      ]);
-      expect(store.getState().focus).toBeNull();
+      expect(actionListener).not.toHaveBeenCalled();
     });
 
     it("ignores echo pushes that equal current rows", () => {
@@ -179,23 +118,22 @@ describe("NoteStore", () => {
       expect(subscriber).not.toHaveBeenCalled();
     });
 
-    it("normalizes a pushed empty document to one empty item", () => {
-      const store = new NoteStore({
-        initial: "- [ ] a",
-        genId: () => "minted-empty",
-      });
-      store.applyExternal([]);
-      expect(store.getState().rows).toEqual([
-        { id: "minted-empty", type: "item", text: "", done: false },
-      ]);
-    });
+    it("disconnect runs the source cleanup; dispose runs outstanding ones", () => {
+      const cleanupA = vi.fn();
+      const cleanupB = vi.fn();
+      const store = new NoteStore();
+      const disconnectA = store.connect(() => cleanupA);
+      store.connect(() => cleanupB);
 
-    it("dispose tears down the source subscription and is idempotent", () => {
-      const cleanup = vi.fn();
-      const store = new NoteStore({ source: () => cleanup });
+      disconnectA();
+      expect(cleanupA).toHaveBeenCalledTimes(1);
+      expect(cleanupB).not.toHaveBeenCalled();
+
       store.dispose();
       store.dispose();
-      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(cleanupA).toHaveBeenCalledTimes(1); // not re-run
+      expect(cleanupB).toHaveBeenCalledTimes(1);
+      expect(store.isDisposed()).toBe(true);
     });
   });
 

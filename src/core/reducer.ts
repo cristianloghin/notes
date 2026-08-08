@@ -1,6 +1,6 @@
 import { defaultGenId } from './id';
 import { parseMarkdown } from './markdown';
-import type { Action, GenId, Row, State } from './types';
+import { sameRows, type Action, type GenId, type Row, type State } from './types';
 
 export function createInitialState(
   initial?: Row[] | string,
@@ -16,6 +16,35 @@ export function createInitialState(
 
 function emptyItem(genId: GenId): Row {
   return { id: genId(), type: 'item', text: '', done: false };
+}
+
+/**
+ * Reconcile host-pushed rows into state (external updates). Pure, and
+ * deliberately here beside the reducer: caret placement has exactly one
+ * owner (spec §5/§6). Focus survives by row id with the caret clamped to
+ * the new text length, re-emitted model-origin so the view re-applies it;
+ * a vanished focused row drops focus. Echo pushes structurally equal to
+ * the current rows return the same state reference. An empty push
+ * normalizes to the empty-document invariant.
+ */
+export function applyExternalRows(
+  state: State,
+  rows: Row[],
+  genId: GenId = defaultGenId,
+): State {
+  const { rows: nextRows } = createInitialState(rows, genId);
+  if (sameRows(state.rows, nextRows)) return state;
+  let focus: State['focus'] = null;
+  if (state.focus) {
+    const target = nextRows.find((r) => r.id === state.focus?.id);
+    if (target) {
+      focus = {
+        id: target.id,
+        offset: Math.min(state.focus.offset, target.text.length),
+      };
+    }
+  }
+  return { rows: nextRows, focus };
 }
 
 function indexOf(state: State, id: string): number {

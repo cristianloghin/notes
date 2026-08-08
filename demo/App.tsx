@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   NoteProvider,
-  NoteStore,
   serialize,
+  useNote,
+  useNoteStore,
   useOnAction,
   useOnRowsChange,
-  type Row,
 } from "../src";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
@@ -57,17 +57,19 @@ function useKeyboardDock() {
 const INITIAL_ROWS = plannerToRows(SAMPLE_PLANNER);
 
 /**
- * Lives OUTSIDE the NoteProvider — no store, no context, no subscription.
- * It renders whatever markdown the app hands it; the app's only source for
- * that string is NoteStore's onRowsChange callback, i.e. the exact glue a
- * consumer application would persist from.
+ * Live document VIEW — derives from the subscribed state, so it reflects
+ * everything, including external pushes. Rendered inside a provider
+ * island, unlike the persistence panels below.
  */
-function MarkdownPreview({ markdown }: { markdown: string }) {
-  return <pre className="md-preview">{markdown}</pre>;
+function MarkdownPreview() {
+  const { state } = useNote();
+  return <pre className="md-preview">{serialize(state.rows)}</pre>;
 }
 
-/** The Planner-shaped data, as the adapter writes it back. Also outside
-    the provider — fed purely by the onRowsChange → adapter pipeline. */
+/** The Planner-shaped data, as the adapter SAVES it back — a persistence
+    view fed by the useOnRowsChange seam, outside any provider. Partner
+    pushes deliberately do not appear here: they came from the backend,
+    so there is nothing to save. */
 function PlannerPreview({ items }: { items: PlannerItem[] }) {
   return (
     <div>
@@ -101,42 +103,32 @@ export default function App() {
   const [panel, setPanel] = useState<"none" | "md" | "planner" | "writes">(
     "none",
   );
-  // The host side of the source channel: the store subscribes at
-  // construction, and initial data plus every external update (a partner's
-  // edit arriving over realtime) flow through the same push function.
-  const pushRef = useRef<((rows: Row[]) => void) | null>(null);
-  const [note] = useState(
-    () =>
-      new NoteStore({
-        // The host mints DB-compatible ids for rows created in the editor.
-        genId: () => `db-${crypto.randomUUID().slice(0, 8)}`,
-        source: (push) => {
-          pushRef.current = push;
-          push(INITIAL_ROWS); // initial load through the same channel
-          return () => {
-            pushRef.current = null;
-          };
-        },
-      }),
-  );
+  // Store lifetime is this component's; disposal is the hook's job.
+  // The host mints DB-compatible ids for rows created in the editor.
+  const note = useNoteStore({
+    initial: INITIAL_ROWS,
+    genId: () => `db-${crypto.randomUUID().slice(0, 8)}`,
+  });
   // Simulate the partner's device: flip the first item's done state and
-  // push it into the store as an external update. preventDefault on
-  // pointerdown so the tap itself cannot blur the field — the push landing
-  // without stealing your caret is the thing being demonstrated.
+  // apply it as an external update. preventDefault on pointerdown so the
+  // tap itself cannot blur the field — the push landing without stealing
+  // your caret is the thing being demonstrated. (A real host would
+  // note.connect() its realtime feed; the button plays that role here.)
   const simulatePartnerEdit = () => {
     const rows = note.getState().rows;
     const first = rows.find((r) => r.type === "item");
     if (!first) return;
-    pushRef.current?.(
+    note.applyExternal(
       rows.map((r) => (r === first ? { ...r, done: !r.done } : r)),
     );
   };
-  // Three independent consumers of the store's seams, as client-shaped
-  // React state: the markdown view, the Planner "database" (previous value
-  // carries the metadata to preserve), and the targeted-writes log.
-  const markdown = useOnRowsChange(note, (rows) => serialize(rows));
-  const plannerItems = useOnRowsChange<PlannerItem[]>(note, (rows, previous) =>
-    rowsToPlanner(rows, previous ?? SAMPLE_PLANNER),
+  // Persistence consumers of the edits-out seam, as client-shaped React
+  // state: the Planner "database" (previous value carries the metadata to
+  // preserve) and the targeted-writes log.
+  const plannerItems = useOnRowsChange<PlannerItem[]>(
+    note,
+    (rows, previous) => rowsToPlanner(rows, previous),
+    SAMPLE_PLANNER,
   );
   const writes = useOnAction<string[]>(
     note,
@@ -226,9 +218,9 @@ export default function App() {
             </div>
           </header>
 
-          {/* Providers mark the store-connected islands; everything else in
-              the app — including the markdown preview below — talks to the
-              note only through the instance or its onRowsChange callback. */}
+          {/* Providers mark the store-connected islands (editor, toolbar,
+              and the MD document view); the persistence panels below talk
+              to the note only through its edits-out seam. */}
           <NoteProvider store={note}>
             <EditorText />
           </NoteProvider>
@@ -240,7 +232,11 @@ export default function App() {
             of a line also makes a heading
           </p>
 
-          {panel === "md" && <MarkdownPreview markdown={markdown} />}
+          {panel === "md" && (
+            <NoteProvider store={note}>
+              <MarkdownPreview />
+            </NoteProvider>
+          )}
           {panel === "planner" && <PlannerPreview items={plannerItems} />}
           {panel === "writes" && <WritesPreview writes={writes} />}
         </div>

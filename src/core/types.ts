@@ -10,6 +10,28 @@ export type TextRow = { id: RowId; type: 'text'; text: string };
 export type Row = HeaderRow | ItemRow | TextRow;
 
 /**
+ * Structural equality over row arrays — used for external-push echo
+ * detection. Lives beside the Row union deliberately: when a row variant
+ * gains a field, add it to this comparison or echoes will silently
+ * ignore that field.
+ */
+export function sameRows(a: Row[], b: Row[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const ra = a[i];
+    const rb = b[i];
+    if (ra.id !== rb.id || ra.type !== rb.type || ra.text !== rb.text) {
+      return false;
+    }
+    if (ra.type === 'item' && rb.type === 'item' && ra.done !== rb.done) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * The caret. `origin: 'dom'` marks a passive sync — the caret position was
  * read *from* the DOM (tap, native caret move) and must never be applied
  * back to it; the view's focus effect ignores such carets. Model-originated

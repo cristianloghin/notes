@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState, reducer } from './reducer';
+import { applyExternalRows, createInitialState, reducer } from './reducer';
 import { parseMarkdown, serialize } from './markdown';
 import type { State } from './types';
 
@@ -239,6 +239,45 @@ describe('pasteText', () => {
     });
     expect(next.rows).toHaveLength(2);
     expect(next.rows[0]).toMatchObject({ type: 'header', text: 'A' });
+  });
+});
+
+describe('applyExternalRows', () => {
+  it('preserves focus by row id and clamps the caret to the new text', () => {
+    const s: ReturnType<typeof createInitialState> = {
+      rows: [{ id: 'x1', type: 'item', text: 'long text here', done: false }],
+      focus: { id: 'x1', offset: 14 },
+    };
+    const next = applyExternalRows(s, [
+      { id: 'x1', type: 'item', text: 'short', done: false },
+    ]);
+    expect(next.focus).toEqual({ id: 'x1', offset: 5 });
+    expect(next.focus).not.toHaveProperty('origin'); // model-origin: view re-applies
+  });
+
+  it('drops focus when the focused row vanished', () => {
+    const s: ReturnType<typeof createInitialState> = {
+      rows: [{ id: 'x1', type: 'item', text: 'a', done: false }],
+      focus: { id: 'x1', offset: 1 },
+    };
+    const next = applyExternalRows(s, [
+      { id: 'x2', type: 'item', text: 'b', done: false },
+    ]);
+    expect(next.focus).toBeNull();
+  });
+
+  it('returns the same state reference for echo pushes', () => {
+    const s = createInitialState('- [x] a\n- [ ] b');
+    const echo = s.rows.map((r) => ({ ...r }));
+    expect(applyExternalRows(s, echo)).toBe(s);
+  });
+
+  it('normalizes an empty push to the empty-document invariant', () => {
+    const s = createInitialState('- [ ] a');
+    const next = applyExternalRows(s, [], () => 'minted-empty');
+    expect(next.rows).toEqual([
+      { id: 'minted-empty', type: 'item', text: '', done: false },
+    ]);
   });
 });
 

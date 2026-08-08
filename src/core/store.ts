@@ -1,49 +1,31 @@
-import { createInitialState, reducer } from "./reducer";
+import { applyExternalRows, createInitialState, reducer } from "./reducer";
 import type { Action, GenId, Row, State } from "./types";
 
 /**
- * Connects the store to the host's data layer. Called once at
- * construction with `push`; the host calls `push(rows)` for the initial
- * load and for every external update (e.g. realtime edits from another
- * device). May return a cleanup function, which `dispose()` calls.
+ * Connects the store to a host data feed. Invoked with `push` (the
+ * store's `applyExternal`); the host calls it for initial data and for
+ * every external update (e.g. realtime edits from another device). May
+ * return a cleanup function, run on disconnect or `dispose()`.
  */
 export type NoteSource = (push: (rows: Row[]) => void) => (() => void) | void;
 
-/** Structural equality for external pushes, so echoes of state we already
-    hold don't cause render churn or focus re-emission. */
-function sameRows(a: Row[], b: Row[]): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const ra = a[i];
-    const rb = b[i];
-    if (ra.id !== rb.id || ra.type !== rb.type || ra.text !== rb.text) {
-      return false;
-    }
-    if (ra.type === "item" && rb.type === "item" && ra.done !== rb.done) {
-      return false;
-    }
-  }
-  return true;
-}
-
 /**
- * The document as a plain external store facing two directions: edits flow
- * OUT to the host through `onRowsChange` listeners; external data flows IN
- * through `source`/`applyExternal`. React only observes (components
- * subscribe via useSyncExternalStore) — data arrival can never remount or
- * reset anything.
+ * The document as a plain external store facing two directions: edits
+ * flow OUT through `onAction` listeners — the single edits-out seam —
+ * and external data flows IN through `connect`/`applyExternal`. React
+ * only observes (components subscribe via useSyncExternalStore), so data
+ * arrival can never remount or reset anything.
  *
- * External pushes are reconciled, not replaced-into: focus survives by row
- * id with the caret clamped to the new text length, and pushes notify
- * subscribers but never fire `onRowsChange` — "the user edited here" and
- * "the world changed elsewhere" are different events, and conflating them
- * creates echo loops through the host's persistence.
+ * External pushes are reconciled in core (`applyExternalRows`): focus
+ * survives by row id with the caret clamped, echo pushes are ignored,
+ * and pushes notify subscribers but never fire `onAction` — "the user
+ * edited here" and "the world changed elsewhere" are different events,
+ * and conflating them creates echo loops through the host's persistence.
  *
- * Lifecycle: a store with a `source` owns a subscription — call
- * `dispose()` when the note session ends. Create the instance outside
- * React (or guard against StrictMode's double-invoked initializers) so a
- * discarded instance doesn't hold a live subscription.
+ * Lifecycle: `dispose()` runs all outstanding connection cleanups and
+ * drops listeners. React consumers should obtain instances through
+ * `useNoteStore(options)`, which constructs and disposes with the owning
+ * component.
  *
  * Dispatches from React discrete events (taps, keys) flush subscribers
  * synchronously within the event, so the focus contract (spec §6) holds
@@ -52,52 +34,21 @@ function sameRows(a: Row[], b: Row[]): boolean {
 export class NoteStore {
   private state: State;
   private listeners = new Set<() => void>();
-  private rowsListeners = new Set<(rows: Row[]) => void>();
   private actionListeners = new Set<
     (action: Action, prevRows: Row[], nextRows: Row[]) => void
   >();
+  private connections = new Set<() => void>();
   private genId?: GenId;
-  private teardown?: () => void;
-
-  /** External-update primitive; also the `push` handed to `source`.
-      Reconciles rather than replaces — see class docs. Never fires
-      `onRowsChange`. Declared before the constructor so `source` can be
-      invoked synchronously during construction. */
-  applyExternal = (rows: Row[]): void => {
-    const prev = this.state;
-    // Normalize through the same invariant as initialization: a pushed
-    // empty document becomes one empty item.
-    const { rows: nextRows } = createInitialState(rows, this.genId);
-    if (sameRows(prev.rows, nextRows)) return;
-    let focus: State["focus"] = null;
-    if (prev.focus) {
-      const target = nextRows.find((r) => r.id === prev.focus?.id);
-      if (target) {
-        // Fresh model-origin object: the view re-applies the caret after
-        // the re-render, clamped to the row's new text.
-        focus = {
-          id: target.id,
-          offset: Math.min(prev.focus.offset, target.text.length),
-        };
-      }
-    }
-    this.state = { rows: nextRows, focus };
-    for (const listener of [...this.listeners]) listener();
-  };
+  private disposed = false;
 
   constructor(options?: {
     initial?: Row[] | string;
     /** Mints ids for all newly created rows (splits, pastes, parses) —
         inject to get host/DB-compatible ids. */
     genId?: GenId;
-    /** Subscribe the store to the host's data layer; initial load and
-        live updates arrive through the same push channel. */
-    source?: NoteSource;
   }) {
     this.genId = options?.genId;
     this.state = createInitialState(options?.initial, this.genId);
-    const cleanup = options?.source?.(this.applyExternal);
-    if (cleanup) this.teardown = cleanup;
   }
 
   /** Stable identity — safe to pass to useSyncExternalStore directly. */
@@ -111,24 +62,13 @@ export class NoteStore {
     };
   };
 
-  /** Register a rows listener; returns an unsubscribe function. Fires
-      after subscribers, only when rows actually changed, and only for
-      edits made through this store — never for external pushes. */
-  onRowsChange = (listener: (rows: Row[]) => void): (() => void) => {
-    this.rowsListeners.add(listener);
-    return () => {
-      this.rowsListeners.delete(listener);
-    };
-  };
-
-  /** Register an action listener; returns an unsubscribe function. Fires
-      for every dispatched action that changed the rows — with the action
-      and both row snapshots, so an adapter can translate the edit into
-      targeted host writes without diffing. Same exclusions as
-      onRowsChange: caret-only actions and external pushes never fire.
-      Listeners receive the action as dispatched (internal delegation,
-      e.g. multi-line setText routing through the paste path, is not
-      exposed). Order per dispatch: subscribers → onAction → onRowsChange. */
+  /** The edits-out seam. Registers a listener fired for every dispatched
+      action that changed the rows, with the action and both row
+      snapshots; returns an unsubscribe function. Never fires for
+      caret-only actions or external pushes. Listeners receive the action
+      as dispatched (internal delegation is not exposed). Rows-only
+      consumers can ignore the first two arguments — or use the
+      `useOnRowsChange` React projection. */
   onAction = (
     listener: (action: Action, prevRows: Row[], nextRows: Row[]) => void,
   ): (() => void) => {
@@ -136,6 +76,30 @@ export class NoteStore {
     return () => {
       this.actionListeners.delete(listener);
     };
+  };
+
+  /** External-update primitive: reconcile host rows into state (see
+      `applyExternalRows` in core). Notifies subscribers; never fires
+      `onAction`. */
+  applyExternal = (rows: Row[]): void => {
+    const prev = this.state;
+    const next = applyExternalRows(prev, rows, this.genId);
+    if (next === prev) return;
+    this.state = next;
+    for (const listener of [...this.listeners]) listener();
+  };
+
+  /** Register a host data feed; returns a disconnect function. The
+      source receives `applyExternal` as its push. Outstanding
+      connections are cleaned up by `dispose()`. */
+  connect = (source: NoteSource): (() => void) => {
+    const cleanup = source(this.applyExternal);
+    const disconnect = () => {
+      this.connections.delete(disconnect);
+      cleanup?.();
+    };
+    this.connections.add(disconnect);
+    return disconnect;
   };
 
   dispatch = (action: Action): void => {
@@ -148,17 +112,17 @@ export class NoteStore {
       for (const listener of [...this.actionListeners]) {
         listener(action, prev.rows, next.rows);
       }
-      for (const listener of [...this.rowsListeners]) listener(next.rows);
     }
   };
 
-  /** End the note session: tears down the source subscription and drops
-      all listeners. Idempotent. */
+  isDisposed = (): boolean => this.disposed;
+
+  /** End the note session: disconnects all sources and drops all
+      listeners. Idempotent. */
   dispose = (): void => {
-    this.teardown?.();
-    this.teardown = undefined;
+    this.disposed = true;
+    for (const disconnect of [...this.connections]) disconnect();
     this.listeners.clear();
-    this.rowsListeners.clear();
     this.actionListeners.clear();
   };
 }

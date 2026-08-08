@@ -12,19 +12,30 @@ Two governing documents (library renamed from "checklist editor" to "Notes",
   sections derived), §5/§6 (the reducer owns caret placement; the view never
   computes focus), §8 (markdown serialization; parser doubles as paste
   handler), §10 (headless core is the product), §12 (phasing).
-- `docs/architecture.md` — structural rules: §1 layer direction, §2 settled
-  decisions, §3 the declared public surface, §4 the Planner adapter roadmap
-  (injectable id factory → onAction → controlled mode), §5 dispositions of
-  the first review's findings, §6 house rules.
+- `docs/architecture.md` — structural rules: §1 layer direction (binding
+  layer has four declared jobs, incl. the hooks), §2 settled decisions, §3
+  the declared public surface, §4 the Planner adapter roadmap (id factory →
+  onAction → external updates, all done as of 2026-08-08), §5 open findings
+  with dispositions, §6 house rules, §7 API design principles.
+  **§7 explicitly widens review scope to consumer code** (the demo's
+  adapter and hook usage, later Planner's) — judged on: consumer code is
+  the spec, two audiences/two complete layers, React observes never owns,
+  the consumer contributes pure functions only, one obvious way.
 
 **Do not restate anything already in architecture.md as if it were my own
 note** — it is the user's declaration and the single copy. Memory only holds
 findings the doc does not yet cover.
 
-Layout as of 2026-08-08 (verified): `src/core/` = pure TS (types, id,
-markdown, reducer, store + two test files); `src/react/` = binding
-(context.tsx, bindings.ts, Editor.tsx, Toolbar.tsx); `src/index.ts` = the
-public surface; `demo/` = skin, outside the package, imports only `../src`.
+Layout as of 2026-08-08 (re-verified this date): `src/core/` = pure TS
+(types, id, markdown, reducer, store + two test files); `src/react/` =
+binding (context.tsx, bindings.ts, hooks.ts, Editor.tsx, Toolbar.tsx);
+`src/index.ts` = the public surface; `demo/` = skin, outside the package,
+imports only `../src` (now also `demo/planner/` — the reference row-grain
+adapter, pure functions + tests, which is HOST code by §4 and the thing
+§7 judges the API against).
+
+`id.ts` staying its own module is deliberate, not fragmentation: `reducer`
+imports `markdown`, so `defaultGenId` living in either would make a cycle.
 
 **How to apply:** read both docs before reviewing; use their vocabulary.
 Spec §11 lists open questions — do not report an open question as a defect.

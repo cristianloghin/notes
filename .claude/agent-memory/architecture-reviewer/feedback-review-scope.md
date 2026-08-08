@@ -14,6 +14,12 @@ keyboard/viewport experiments, debug HUD, commented-out probes). It is
 deliberately scratch, and architecture.md §6 already requires only that it
 stay deletable and import from `src/index.ts` alone.
 
+**Amended 2026-08-08 by architecture.md §7:** consumer code IS in scope for
+the API-design checks — assess how `demo/App.tsx` and `demo/planner/`
+*consume* the library (store construction, hook usage, adapter shape), since
+"consuming a capability requires repeated wiring" is a library finding. Still
+never review the demo's UI, markup, styling, or device experiments.
+
 **How to apply:** resolve the review target to `src/` unless told otherwise.
 Demo code is admissible only as *evidence about the library* — e.g. that the
 skin declares a scroll policy the binding layer silently overrides, or that

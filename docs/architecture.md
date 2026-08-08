@@ -25,16 +25,20 @@ src/index.ts — the public surface; the only module consumers import from.
   reducer is the product; `NoteStore` is its thin observable wrapper —
   state lives in the instance, components subscribe. Consumers create the
   instance and hand it to `NoteProvider`; nothing else is threaded through
-  props. The store's `onRowsChange(fn): unsubscribe` registration (rows
-  changes only, never caret-only updates, fired after subscribers) is the
-  integration seam a consumer app persists from — step one of the §4
-  adapter roadmap. The store does not serialize; string-grain hosts call
+  props. The store's `onAction(fn): unsubscribe` registration is the
+  SINGLE edits-out seam (rows-changing dispatches only, never caret-only
+  updates or external pushes, fired after subscribers); `connect(source):
+  unsubscribe` is the data-in channel, with `applyExternal(rows)` as its
+  primitive and the reconciliation living in core beside the reducer
+  (`applyExternalRows` — caret placement has one owner). The store does
+  not serialize; string-grain hosts call
   `serialize(store.getState().rows)`.
-- **Binding** owns exactly four jobs: providing the store through context
-  (`useSyncExternalStore`), binding the store's consumer seams to React
-  state (`useOnRowsChange`, `useOnAction`), translating DOM input events
-  into actions, and applying `state.focus` to the DOM (the focus contract,
-  spec §6). It computes nothing about documents or carets itself.
+- **Binding** owns exactly five jobs: providing the store through context
+  (`useSyncExternalStore`), managing store lifecycle (`useNoteStore`
+  constructs and disposes with the owning component), binding the store's
+  consumer seams to React state (`useOnRowsChange`, `useOnAction`),
+  translating DOM input events into actions, and applying `state.focus`
+  to the DOM (the focus contract, spec §6). It computes nothing about documents or carets itself.
   Dispatches from discrete events flush subscribers synchronously, so the
   focus contract's same-call-stack guarantee survives the store
   indirection.
@@ -95,9 +99,13 @@ earned through a bug.
 Declared in `src/index.ts`:
 
 - `NoteStore`, `NoteProvider`, `useNote`
-- `useOnRowsChange`, `useOnAction` — React bindings of the store's
-  consumer seams: mapper/fold in, client-shaped React state out; same
-  exclusions as the seams themselves (edits only, no external pushes)
+- `useNoteStore` — constructs a store bound to the owning component's
+  lifetime (disposal included; StrictMode-safe)
+- `useOnRowsChange`, `useOnAction` — React bindings of the edits-out
+  seam: mapper/fold in, client-shaped React state out; edits only, no
+  external pushes. `useOnRowsChange` is the rows-only projection of
+  `onAction` — persistence seam, not a view feed; views derive from
+  `useNote().state`.
 - `Editor`, `Toolbar`
 - `parseMarkdown`, `serialize`
 - The types: `Row`, `RowId`, `GenId`, `Caret`, `State`, `Action` (and row
@@ -149,21 +157,25 @@ phase in the spec):
 3. **Action observation** — *done 2026-08-08*:
    `onAction(fn): unsubscribe` fires for every dispatched action that
    changed rows, with the action and both row snapshots, so an adapter
-   translates edits into targeted host writes without diffing. Same
-   exclusions as `onRowsChange` (no caret-only actions, no external
-   pushes); order per dispatch is subscribers → onAction → onRowsChange.
-   Listeners see the action as dispatched — internal delegation is not
-   exposed.
-4. **External updates** — *done 2026-08-08*: `new NoteStore({ source })`
-   subscribes the store to host pushes; initial load and live updates
-   arrive through one channel. `applyExternal(rows)` is the underlying
-   primitive; `dispose()` tears the subscription down. Reconciliation
-   preserves focus by row id with a clamped, model-origin caret (settled
-   decisions 1–3 hold); echo pushes that equal current rows are ignored.
-   External pushes notify subscribers but **never fire `onRowsChange`** —
-   edits-out and pushes-in are different events; conflating them makes
-   echo loops through the host's persistence. Conflict ordering and
-   mid-edit deferral policy stay host-side (Planner's edit guards).
+   translates edits into targeted host writes without diffing. No
+   caret-only actions, no external pushes; order per dispatch is
+   subscribers → onAction. Listeners see the action as dispatched —
+   internal delegation is not exposed. (An earlier `onRowsChange`
+   registration was merged into this seam per §7.5 — third review,
+   finding 2; `useOnRowsChange` survives as its React rows-projection.)
+4. **External updates** — *done 2026-08-08*: `store.connect(source):
+   unsubscribe` registers a host data feed; initial load and live updates
+   arrive through one push channel. `applyExternal(rows)` is the
+   underlying primitive; reconciliation lives in core
+   (`applyExternalRows`, beside the reducer — caret placement has one
+   owner) and preserves focus by row id with a clamped, model-origin
+   caret (settled decisions 1–3 hold); echo pushes that equal current
+   rows are ignored. External pushes notify subscribers but **never fire
+   `onAction`** — edits-out and pushes-in are different events;
+   conflating them makes echo loops through the host's persistence.
+   `dispose()` runs outstanding connection cleanups; React consumers get
+   lifecycle via `useNoteStore`. Conflict ordering and mid-edit deferral
+   policy stay host-side (Planner's edit guards).
 
 Host-side contracts (the host's job, documented here so the library never
 absorbs them): commit debouncing, edit-session guards (Planner's
@@ -193,6 +205,18 @@ unsubscribe; `reducer`/`createInitialState` removed from the surface;
 `NoteStore.toMarkdown` removed. First review's findings 1, 2, 4 →
 settled decisions 1–4; finding 5 → `src/index.ts`; finding 7 → superseded
 by the id factory.
+
+Resolved 2026-08-08 (third review): external-push reconciliation moved
+into core (`applyExternalRows` — caret placement has one owner; its
+focus tests live in `reducer.test.ts` per house rule); `sameRows` moved
+beside the `Row` union; `onRowsChange` merged into `onAction` as the
+single edits-out seam, `useOnRowsChange` remaining as its React
+rows-projection with repositioned docs (persistence seam, not a view
+feed — the demo's document view now derives from `useNote().state`);
+`source` constructor option replaced by `connect(source): unsubscribe`;
+store lifecycle owned by the binding (`useNoteStore` constructs and
+disposes; the StrictMode caveat is deleted, not documented); hook
+seeding contracts unified (both take `initial`).
 
 ## 6. House rules
 

@@ -1,3 +1,3 @@
 - [Governing docs](project-governing-spec.md) — docs/note-editor-spec.md (intent) + docs/architecture.md (rules) govern reviews; current src/ layout; tooling coverage gap.
-- [Review scope](feedback-review-scope.md) — review src/ only; demo/ is the user's own skin, readable as evidence but never reviewed.
-- [Open findings: Notes](review-open-findings-notes.md) — 7 findings from the 2026-08-08 second review; first review's findings live in architecture.md §5.
+- [Review scope](feedback-review-scope.md) — review src/; demo UI never reviewed, but §7 puts demo *consumption* (hooks, adapter) in scope.
+- [Open findings: Notes](review-open-findings-notes.md) — 6 open findings from the 2026-08-08 third review; accepted/acted-on ones live in architecture.md §2/§5.

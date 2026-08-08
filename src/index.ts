@@ -3,7 +3,7 @@
 // demo, import only from here.
 export { NoteStore, type NoteSource } from "./core/store";
 export { NoteProvider, useNote } from "./react/context";
-export { useOnRowsChange, useOnAction } from "./react/hooks";
+export { useNoteStore, useOnRowsChange, useOnAction } from "./react/hooks";
 export {
   Editor,
   type EditorRowRenderProps,
