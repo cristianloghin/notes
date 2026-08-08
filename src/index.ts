@@ -1,7 +1,7 @@
 // Public surface of the library (architecture.md §3). Everything else in
 // this directory is an implementation detail — consumers, including the
 // demo, import only from here.
-export { NoteStore } from "./core/store";
+export { NoteStore, type NoteSource } from "./core/store";
 export { NoteProvider, useNote } from "./react/context";
 export {
   Editor,

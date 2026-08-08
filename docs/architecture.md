@@ -145,10 +145,16 @@ phase in the spec):
    adapter can translate edits into host writes without diffing. Must be a
    registration (returning unsubscribe), like `subscribe`/`onRowsChange` —
    never a constructor option.
-4. **External updates / controlled mode** — accepting host-side row changes
-   (e.g. realtime edits from another device) without clobbering local focus
-   and caret. Design constraint: the reconciliation must preserve settled
-   decisions 1–3.
+4. **External updates** — *done 2026-08-08*: `new NoteStore({ source })`
+   subscribes the store to host pushes; initial load and live updates
+   arrive through one channel. `applyExternal(rows)` is the underlying
+   primitive; `dispose()` tears the subscription down. Reconciliation
+   preserves focus by row id with a clamped, model-origin caret (settled
+   decisions 1–3 hold); echo pushes that equal current rows are ignored.
+   External pushes notify subscribers but **never fire `onRowsChange`** —
+   edits-out and pushes-in are different events; conflating them makes
+   echo loops through the host's persistence. Conflict ordering and
+   mid-edit deferral policy stay host-side (Planner's edit guards).
 
 Host-side contracts (the host's job, documented here so the library never
 absorbs them): commit debouncing, edit-session guards (Planner's

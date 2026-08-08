@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NoteProvider, NoteStore, serialize } from "../src";
+import { NoteProvider, NoteStore, serialize, type Row } from "../src";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
@@ -80,14 +80,36 @@ export default function App() {
   const [plannerItems, setPlannerItems] = useState(SAMPLE_PLANNER);
   // Latest saved Planner state, so each save can preserve metadata by id.
   const plannerRef = useRef(SAMPLE_PLANNER);
+  // The host side of the source channel: the store subscribes at
+  // construction, and initial data plus every external update (a partner's
+  // edit arriving over realtime) flow through the same push function.
+  const pushRef = useRef<((rows: Row[]) => void) | null>(null);
   const [note] = useState(
     () =>
       new NoteStore({
-        initial: INITIAL_ROWS,
         // The host mints DB-compatible ids for rows created in the editor.
         genId: () => `db-${crypto.randomUUID().slice(0, 8)}`,
+        source: (push) => {
+          pushRef.current = push;
+          push(INITIAL_ROWS); // initial load through the same channel
+          return () => {
+            pushRef.current = null;
+          };
+        },
       }),
   );
+  // Simulate the partner's device: flip the first item's done state and
+  // push it into the store as an external update. preventDefault on
+  // pointerdown so the tap itself cannot blur the field — the push landing
+  // without stealing your caret is the thing being demonstrated.
+  const simulatePartnerEdit = () => {
+    const rows = note.getState().rows;
+    const first = rows.find((r) => r.type === "item");
+    if (!first) return;
+    pushRef.current?.(
+      rows.map((r) => (r === first ? { ...r, done: !r.done } : r)),
+    );
+  };
   // Two independent consumers of the same seam: the markdown view and the
   // Planner-shaped "database".
   useEffect(
@@ -156,6 +178,13 @@ export default function App() {
                 }
               >
                 Planner
+              </button>
+              <button
+                className="bar-btn"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={simulatePartnerEdit}
+              >
+                Partner
               </button>
               <button
                 className="bar-btn"

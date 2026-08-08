@@ -73,6 +73,84 @@ describe("NoteStore", () => {
     });
   });
 
+  describe("source / applyExternal", () => {
+    it("loads initial data through the push channel", () => {
+      const store = new NoteStore({
+        source: (push) => {
+          push([{ id: "x1", type: "item", text: "from host", done: false }]);
+        },
+      });
+      expect(store.getState().rows).toEqual([
+        { id: "x1", type: "item", text: "from host", done: false },
+      ]);
+    });
+
+    it("notifies subscribers but never rows listeners", () => {
+      const store = new NoteStore({ initial: "- [ ] a" });
+      const subscriber = vi.fn();
+      const rowsListener = vi.fn();
+      store.subscribe(subscriber);
+      store.onRowsChange(rowsListener);
+      store.applyExternal([
+        { id: "x1", type: "item", text: "pushed", done: true },
+      ]);
+      expect(subscriber).toHaveBeenCalledTimes(1);
+      expect(rowsListener).not.toHaveBeenCalled();
+    });
+
+    it("preserves focus by row id and clamps the caret", () => {
+      const store = new NoteStore({
+        initial: [{ id: "x1", type: "item", text: "long text here", done: false }],
+      });
+      store.dispatch({ type: "focusRow", id: "x1", offset: 14 });
+      store.applyExternal([
+        { id: "x1", type: "item", text: "short", done: false },
+      ]);
+      expect(store.getState().focus).toEqual({ id: "x1", offset: 5 });
+      // fresh model-origin object so the view re-applies the caret
+      expect(store.getState().focus).not.toHaveProperty("origin");
+    });
+
+    it("drops focus when the focused row vanished", () => {
+      const store = new NoteStore({
+        initial: [{ id: "x1", type: "item", text: "a", done: false }],
+      });
+      store.dispatch({ type: "focusRow", id: "x1", offset: 1 });
+      store.applyExternal([
+        { id: "x2", type: "item", text: "b", done: false },
+      ]);
+      expect(store.getState().focus).toBeNull();
+    });
+
+    it("ignores echo pushes that equal current rows", () => {
+      const store = new NoteStore({ initial: "- [x] a\n- [ ] b" });
+      const subscriber = vi.fn();
+      store.subscribe(subscriber);
+      const echo = store.getState().rows.map((r) => ({ ...r }));
+      store.applyExternal(echo);
+      expect(subscriber).not.toHaveBeenCalled();
+    });
+
+    it("normalizes a pushed empty document to one empty item", () => {
+      const store = new NoteStore({
+        initial: "- [ ] a",
+        genId: () => "minted-empty",
+      });
+      store.applyExternal([]);
+      expect(store.getState().rows).toEqual([
+        { id: "minted-empty", type: "item", text: "", done: false },
+      ]);
+    });
+
+    it("dispose tears down the source subscription and is idempotent", () => {
+      const cleanup = vi.fn();
+      const store = new NoteStore({ source: () => cleanup });
+      store.dispose();
+      store.dispose();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("injected genId", () => {
     it("mints every new row id through the host factory — splits AND pastes", () => {
       let n = 0;
