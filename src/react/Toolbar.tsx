@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useNote } from "./context";
-import type { Row } from "./types";
+import type { Row } from "../core/types";
 
 export type ToolbarRenderProps = {
   /** Row the caret is on, or null before the first focus. */

@@ -1,4 +1,4 @@
-import { Toolbar } from "../../src/lib";
+import { Toolbar } from "../../src";
 
 /* Accessory toolbar, rendered inside the fixed .toolbar-dock (App.tsx),
   which is the only keyboard-tracking element in the layout. The Toolbar

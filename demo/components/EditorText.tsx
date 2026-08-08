@@ -1,4 +1,4 @@
-import { Editor } from "../../src/lib";
+import { Editor } from "../../src";
 
 export const EditorText = () => {
   return (

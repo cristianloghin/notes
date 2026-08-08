@@ -12,11 +12,13 @@ pick one.
 Three layers, dependencies point strictly downward:
 
 ```
-demo/       skin        (App.tsx, styles.css, main.tsx — outside the package)
+demo/        skin       (App.tsx, styles.css, main.tsx — outside the package)
     │
-src/lib/    binding     (context.tsx, bindings.ts, Editor.tsx, Toolbar.tsx,
-    │                    index.ts)
-src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts, store.ts)
+src/react/   binding    (context.tsx, bindings.ts, Editor.tsx, Toolbar.tsx)
+    │
+src/core/    core       (types.ts, id.ts, markdown.ts, reducer.ts, store.ts)
+
+src/index.ts — the public surface; the only module consumers import from.
 ```
 
 - **Core** is pure TypeScript: no React, no DOM, no browser globals. The
@@ -35,7 +37,7 @@ src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts, store.ts)
   same-call-stack guarantee survives the store indirection.
 - **Skin** owns presentation: layout, theming, viewport/keyboard handling,
   toolbar markup. The demo skin is a reference consumer, not part of the
-  library — it lives outside `src/` and imports only from `src/lib/index.ts`,
+  library — it lives outside `src/` and imports only from `src/index.ts`,
   never from individual lib modules.
 - `Toolbar` is a headless binding-layer component: it derives the command
   surface (`setRowType`, `moveRow`, active row) and owns the §6 pointerdown
@@ -44,9 +46,9 @@ src/lib/    core        (types.ts, id.ts, markdown.ts, reducer.ts, store.ts)
   render-prop child and owns the keyed-by-row-id invariant (spec §7) and
   the container's list semantics; all row markup is the child's.
 
-Nothing in `lib/` may import from `demo/`. Nothing in core may import from
-the binding. Violations of direction are always findings, never judgment
-calls.
+Nothing in `src/` may import from `demo/`. Nothing in `src/core/` may
+import from `src/react/`. Violations of direction are always findings,
+never judgment calls.
 
 ## 2. Settled decisions
 
@@ -87,7 +89,7 @@ earned through a bug.
 
 ## 3. Public surface
 
-Declared in `src/lib/index.ts`:
+Declared in `src/index.ts`:
 
 - `NoteStore`, `NoteProvider`, `useNote`
 - `Editor`, `Toolbar`, `reducer`, `createInitialState`
@@ -108,7 +110,7 @@ than the code — the drift is earned.
 ## 4. General-purpose stance and host integration
 
 The library is host-agnostic. **No host-specific code — naming, schema
-assumptions, data fetching, persistence — may appear in `src/lib/`.**
+assumptions, data fetching, persistence — may appear in `src/`.**
 Integration logic lives in the host as an adapter. This is a hard boundary
 on the same level as layer direction.
 
@@ -128,8 +130,8 @@ Capabilities the library must grow to support row-grain adapters, in
 dependency order (these supersede the vaguer "0.4 persistence adapters"
 phase in the spec):
 
-1. `src/lib/index.ts` — declared surface (§3).
-2. **Injectable id factory** — `useChecklist({ genId })` so a host can mint
+1. `src/index.ts` — declared surface (§3).
+2. **Injectable id factory** — `new NoteStore({ genId })` so a host can mint
    DB-compatible ids at row creation. Also resolves the reducer-purity
    finding: the default factory stays, but the reducer's determinism is the
    host's choice.
@@ -151,7 +153,7 @@ From the 2026-08 architecture review, still open, with disposition:
 - **(3) Rendering concerns in the binding** — autosize, `CSS.supports`
   probe, `scrollIntoView`. *Accepted direction:* move to skin; keyboard
   avoidance gets exactly one owner. Do before adding any second skin.
-- **(5) No `lib/index.ts`** — *resolved*: `src/lib/index.ts` declares the
+- **(5) No `lib/index.ts`** — *resolved*: `src/index.ts` declares the
   surface and the demo consumes only it.
 - **(6) `beforeinput` wired via ref-callback expando** — *accepted
   direction:* one delegated listener via `getContainerProps`.
@@ -167,7 +169,7 @@ Findings 1, 2, 4 from that review are resolved (see settled decisions 1–4).
 - New input paths (key, IME, paste, dictation, autofill) are guilty until
   proven: assume they can deliver multi-line text and composition states.
 - The demo skin may use library internals freely but must remain deletable:
-  if removing `src/demo/` would break `src/lib/`, the boundary has been
+  if removing `demo/` would break `src/`, the boundary has been
   violated.
 - Spec §11 open questions get answered in the spec (or here), not implied
   by code.

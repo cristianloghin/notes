@@ -15,8 +15,8 @@ Two governing documents (library renamed from "checklist editor" to "Notes",
 - `docs/architecture.md` — structural rules: layer direction
   (core → binding → skin), settled decisions (caret in state, focus
   re-emission, DOM-origin focus never re-applied), the declared public
-  surface in src/lib/index.ts, and the host-adapter stance (no
-  host-specific code in src/lib/).
+  surface in src/index.ts, and the host-adapter stance (no
+  host-specific code in src/).
 
 Current architecture (2026-08-08): state lives in a `NoteStore` class
 (wraps the pure reducer; `onRowsChange` is the consumer integration seam);

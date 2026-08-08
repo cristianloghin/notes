@@ -4,8 +4,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { NoteStore } from "./store";
-import type { State } from "./types";
+import type { NoteStore } from "../core/store";
+import type { State } from "../core/types";
 
 const NoteContext = createContext<NoteStore | null>(null);
 

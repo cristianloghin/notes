@@ -1,7 +1,7 @@
 import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { useEditorBindings } from "./bindings";
 import { useNote } from "./context";
-import type { Row } from "./types";
+import type { Row } from "../core/types";
 
 type Bindings = ReturnType<typeof useEditorBindings>;
 

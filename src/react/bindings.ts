@@ -6,8 +6,8 @@ import {
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
-import type { NoteStore } from "./store";
-import type { RowId, State } from "./types";
+import type { NoteStore } from "../core/store";
+import type { RowId, State } from "../core/types";
 
 const supportsFieldSizing =
   typeof CSS !== "undefined" && CSS.supports?.("field-sizing", "content");
