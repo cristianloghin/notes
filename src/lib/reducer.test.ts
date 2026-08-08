@@ -157,6 +157,19 @@ describe('promoteHeader', () => {
   });
 });
 
+describe('focusRow', () => {
+  it('marks DOM-originated syncs so the view never re-applies them', () => {
+    const s = state();
+    const id = s.rows[1].id;
+    const passive = reducer(s, { type: 'focusRow', id, offset: 3, origin: 'dom' });
+    expect(passive.focus).toEqual({ id, offset: 3, origin: 'dom' });
+
+    const request = reducer(s, { type: 'focusRow', id, offset: 3 });
+    expect(request.focus).toEqual({ id, offset: 3 });
+    expect(request.focus).not.toHaveProperty('origin');
+  });
+});
+
 describe('setRowType', () => {
   it('re-emits focus as a fresh object (type switches remount the field)', () => {
     const base = state();
@@ -180,6 +193,15 @@ describe('move', () => {
     ]);
     expect(next.focus).toEqual({ id, offset: 3 });
     expect(next.focus).not.toBe(s.focus);
+  });
+
+  it('strips DOM origin on re-emission so focus is re-applied after reorder', () => {
+    const base = state();
+    const id = base.rows[1].id;
+    const s = { ...base, focus: { id, offset: 3, origin: 'dom' as const } };
+    const next = reducer(s, { type: 'move', id, toIndex: 2 });
+    expect(next.focus).toEqual({ id, offset: 3 });
+    expect(next.focus).not.toHaveProperty('origin');
   });
 });
 

@@ -5,7 +5,13 @@ export type ItemRow = { id: RowId; type: 'item'; text: string; done: boolean };
 export type TextRow = { id: RowId; type: 'text'; text: string };
 export type Row = HeaderRow | ItemRow | TextRow;
 
-export type Caret = { id: RowId; offset: number };
+/**
+ * The caret. `origin: 'dom'` marks a passive sync — the caret position was
+ * read *from* the DOM (tap, native caret move) and must never be applied
+ * back to it; the view's focus effect ignores such carets. Model-originated
+ * carets (no origin) are placement requests the view must apply.
+ */
+export type Caret = { id: RowId; offset: number; origin?: 'dom' };
 
 export type State = {
   rows: Row[];
@@ -21,5 +27,5 @@ export type Action =
   | { type: 'toggleDone'; id: RowId }
   | { type: 'setRowType'; id: RowId; rowType: Row['type'] }
   | { type: 'move'; id: RowId; toIndex: number }
-  | { type: 'focusRow'; id: RowId; offset: number }
+  | { type: 'focusRow'; id: RowId; offset: number; origin?: 'dom' }
   | { type: 'pasteText'; id: RowId; offset: number; text: string };

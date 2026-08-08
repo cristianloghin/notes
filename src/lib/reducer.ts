@@ -19,6 +19,11 @@ function indexOf(state: State, id: string): number {
   return state.rows.findIndex((r) => r.id === id);
 }
 
+/** Fresh focus object as a model-side placement request (origin stripped). */
+function reemitFocus(focus: State['focus']): State['focus'] {
+  return focus ? { id: focus.id, offset: focus.offset } : null;
+}
+
 /**
  * Pure, DOM-free state reducer. Owns caret placement: every structural
  * action returns `focus` as part of the new state (spec §5, §6).
@@ -141,7 +146,9 @@ export function reducer(state: State, action: Action): State {
       // Re-emit focus: a type switch typically remounts the row's field
       // (skins render headers and items differently), which blurs it — a
       // fresh focus object makes the view re-apply within the same event.
-      return { rows, focus: state.focus ? { ...state.focus } : null };
+      // Origin is dropped: even if the caret was last synced from the DOM,
+      // this re-emission is a model-side placement request.
+      return { rows, focus: reemitFocus(state.focus) };
     }
 
     case 'move': {
@@ -153,8 +160,9 @@ export function reducer(state: State, action: Action): State {
       rows.splice(to, 0, row);
       // Re-emit focus as a fresh object: reordering detaches the focused DOM
       // node, so the view must re-apply focus even though id/offset are
-      // unchanged. Identity change is what triggers the layout effect.
-      return { rows, focus: state.focus ? { ...state.focus } : null };
+      // unchanged. Identity change is what triggers the layout effect, and
+      // origin is dropped so a previously DOM-synced caret is re-applied.
+      return { rows, focus: reemitFocus(state.focus) };
     }
 
     case 'focusRow': {
@@ -162,7 +170,13 @@ export function reducer(state: State, action: Action): State {
       if (i < 0) return state;
       const row = state.rows[i];
       const offset = Math.max(0, Math.min(action.offset, row.text.length));
-      return { ...state, focus: { id: row.id, offset } };
+      return {
+        ...state,
+        focus:
+          action.origin === 'dom'
+            ? { id: row.id, offset, origin: 'dom' }
+            : { id: row.id, offset },
+      };
     }
 
     case 'pasteText': {

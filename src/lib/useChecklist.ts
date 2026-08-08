@@ -44,7 +44,10 @@ export function useChecklist(options?: {
   // after passive syncs) so applying never fights native caret behavior.
   useLayoutEffect(() => {
     const focus = state.focus;
-    if (!focus || composing.current) return;
+    // DOM-originated focus is bookkeeping, never a placement request:
+    // re-applying it would clobber Safari's in-flight tap caret placement
+    // and trigger a scroll nudge on every tap into a row.
+    if (!focus || focus.origin === 'dom' || composing.current) return;
     const el = refs.current.get(focus.id);
     if (!el) return;
     if (
@@ -214,7 +217,12 @@ export function useChecklist(options?: {
       // (collapsing them via re-application would break text selection).
       onFocus: (e: FocusEvent<HTMLTextAreaElement>) => {
         if (applyingFocus.current) return;
-        dispatch({ type: 'focusRow', id, offset: e.currentTarget.selectionStart ?? 0 });
+        dispatch({
+          type: 'focusRow',
+          id,
+          offset: e.currentTarget.selectionStart ?? 0,
+          origin: 'dom',
+        });
       },
       onSelect: (e: SyntheticEvent<HTMLTextAreaElement>) => {
         if (applyingFocus.current || composing.current) return;
@@ -227,7 +235,7 @@ export function useChecklist(options?: {
         ) {
           return;
         }
-        dispatch({ type: 'focusRow', id, offset: el.selectionStart });
+        dispatch({ type: 'focusRow', id, offset: el.selectionStart, origin: 'dom' });
       },
     };
   }

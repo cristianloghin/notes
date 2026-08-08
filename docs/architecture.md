@@ -54,6 +54,11 @@ earned through a bug.
    application is guarded (`applyingFocus`) and skipped when the DOM
    already matches. Re-applying a collapsed caret over a user selection
    breaks native text selection.
+   Additionally, **DOM-originated focus (`origin: 'dom'`) is bookkeeping,
+   never a placement request** — the view must not re-apply it. Re-applying
+   clobbers Safari's in-flight tap caret placement and adds a scroll nudge
+   on every tap (the "vertical jump"). Actions that re-emit focus (`move`,
+   `setRowType`) strip the origin, turning it back into a request.
 4. **One action, one job.** `setText` stores text + caret only. Multi-line
    input delegates to `pasteText`; `# ` promotion is its own action
    (`promoteHeader`), with the *trigger* detected in the binding and the
