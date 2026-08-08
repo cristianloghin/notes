@@ -7,24 +7,41 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type SyntheticEvent,
-} from 'react';
-import { createInitialState, reducer } from './reducer';
-import { serialize } from './markdown';
-import type { Action, Row, RowId } from './types';
+} from "react";
+import { serialize } from "./markdown";
+import { createInitialState, reducer } from "./reducer";
+import type { Action, Row, RowId } from "./types";
 
 const supportsFieldSizing =
-  typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content');
+  typeof CSS !== "undefined" && CSS.supports?.("field-sizing", "content");
+
+// Last value each field was sized for. Autosizing collapses the field to
+// measure it (height: auto), which transiently shrinks the scroll
+// container's content height — the browser then clamps scrollTop and does
+// NOT restore it, which reads as a random jump when scrolled down. Only
+// re-measure fields whose text actually changed so a rows change (e.g. a
+// done-toggle) never touches any height.
+const lastSizedValue = new WeakMap<HTMLTextAreaElement, string>();
 
 function autosize(el: HTMLTextAreaElement) {
-  el.style.height = 'auto';
+  if (lastSizedValue.get(el) === el.value) return;
+  lastSizedValue.set(el, el.value);
+  el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
 }
 
 export function useChecklist(options?: {
   initial?: Row[] | string;
   onChange?: (rows: Row[]) => void;
+  /** Reveal the focused row after model-side focus placement (default true).
+      Set false to disable the hook's only scroll call. */
+  scrollOnFocus?: boolean;
 }) {
-  const [state, dispatch] = useReducer(reducer, options?.initial, createInitialState);
+  const [state, dispatch] = useReducer(
+    reducer,
+    options?.initial,
+    createInitialState,
+  );
   const refs = useRef(new Map<RowId, HTMLTextAreaElement>());
   const composing = useRef(false);
   // True while the layout effect is applying focus to the DOM, so the focus
@@ -47,7 +64,7 @@ export function useChecklist(options?: {
     // DOM-originated focus is bookkeeping, never a placement request:
     // re-applying it would clobber Safari's in-flight tap caret placement
     // and trigger a scroll nudge on every tap into a row.
-    if (!focus || focus.origin === 'dom' || composing.current) return;
+    if (!focus || focus.origin === "dom" || composing.current) return;
     const el = refs.current.get(focus.id);
     if (!el) return;
     if (
@@ -64,7 +81,9 @@ export function useChecklist(options?: {
     } finally {
       applyingFocus.current = false;
     }
-    el.scrollIntoView({ block: 'nearest' });
+    if (options?.scrollOnFocus !== false) {
+      el.scrollIntoView({ block: "nearest" });
+    }
   }, [state.focus]);
 
   // Auto-grow fallback where `field-sizing: content` is unsupported.
@@ -77,20 +96,29 @@ export function useChecklist(options?: {
     if (composing.current) return;
     const el = e.target as HTMLTextAreaElement;
     if (
-      (e.inputType === 'insertText' || e.inputType === 'insertReplacementText') &&
+      (e.inputType === "insertText" ||
+        e.inputType === "insertReplacementText") &&
       e.data != null &&
-      e.data.includes('\n')
+      e.data.includes("\n")
     ) {
       // Multi-line commits (dictation, swipe keyboards) arrive as one
       // insertText — route through the paste path so lines become rows.
       e.preventDefault();
-      dispatch({ type: 'pasteText', id, offset: el.selectionStart ?? 0, text: e.data });
+      dispatch({
+        type: "pasteText",
+        id,
+        offset: el.selectionStart ?? 0,
+        text: e.data,
+      });
       return;
     }
-    if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
+    if (
+      e.inputType === "insertLineBreak" ||
+      e.inputType === "insertParagraph"
+    ) {
       e.preventDefault();
       dispatch({
-        type: 'split',
+        type: "split",
         id,
         offset: el.selectionStart ?? el.value.length,
         offsetEnd: el.selectionEnd ?? undefined,
@@ -100,12 +128,12 @@ export function useChecklist(options?: {
     // Backspace-at-zero must be detected here, not on keydown: Android soft
     // keyboards report keyCode 229 / "Unidentified" in composition (spec §9).
     if (
-      e.inputType === 'deleteContentBackward' &&
+      e.inputType === "deleteContentBackward" &&
       el.selectionStart === 0 &&
       el.selectionEnd === 0
     ) {
       e.preventDefault();
-      dispatch({ type: 'mergeBackward', id });
+      dispatch({ type: "mergeBackward", id });
     }
   }
 
@@ -116,7 +144,7 @@ export function useChecklist(options?: {
         const marked = el as HTMLTextAreaElement & { __clAttached?: boolean };
         if (!marked.__clAttached) {
           marked.__clAttached = true;
-          el.addEventListener('beforeinput', (e) =>
+          el.addEventListener("beforeinput", (e) =>
             handleBeforeInput(id, e as InputEvent),
           );
           if (!supportsFieldSizing) autosize(el);
@@ -132,10 +160,10 @@ export function useChecklist(options?: {
     const row = state.rows[index];
     return {
       ref: makeRef(id),
-      value: row?.text ?? '',
+      value: row?.text ?? "",
       rows: 1,
-      enterKeyHint: 'next' as const,
-      autoComplete: 'off',
+      enterKeyHint: "next" as const,
+      autoComplete: "off",
       spellCheck: false,
       onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const text = e.currentTarget.value;
@@ -144,45 +172,58 @@ export function useChecklist(options?: {
         // item or paragraph triggers header promotion; the reducer owns it.
         if (
           row != null &&
-          row.type !== 'header' &&
-          text.startsWith('# ') &&
-          !text.includes('\n') &&
+          row.type !== "header" &&
+          text.startsWith("# ") &&
+          !text.includes("\n") &&
           !composing.current
         ) {
-          dispatch({ type: 'promoteHeader', id, text, caret });
+          dispatch({ type: "promoteHeader", id, text, caret });
           return;
         }
-        dispatch({ type: 'setText', id, text, caret });
+        dispatch({ type: "setText", id, text, caret });
       },
       onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => {
         if (composing.current || e.nativeEvent.isComposing) return;
         const el = e.currentTarget;
-        if (e.key === 'Enter') {
+        if (e.key === "Enter") {
           // Hardware keyboards; prevented here so beforeinput never fires
           // for the same keystroke. Soft keyboards land in beforeinput.
           e.preventDefault();
-          dispatch({ type: 'split', id, offset: el.selectionStart, offsetEnd: el.selectionEnd });
+          dispatch({
+            type: "split",
+            id,
+            offset: el.selectionStart,
+            offsetEnd: el.selectionEnd,
+          });
           return;
         }
-        if (e.key === 'Backspace' && el.selectionStart === 0 && el.selectionEnd === 0) {
+        if (
+          e.key === "Backspace" &&
+          el.selectionStart === 0 &&
+          el.selectionEnd === 0
+        ) {
           // At offset 0 the deletion is a no-op, so beforeinput never fires —
           // merge must be detected here. Android IMEs that report 229 /
           // "Unidentified" instead of "Backspace" fall through to the
           // beforeinput handler below.
           e.preventDefault();
-          dispatch({ type: 'mergeBackward', id });
+          dispatch({ type: "mergeBackward", id });
           return;
         }
-        if (e.key === 'ArrowUp' && el.selectionStart === 0 && el.selectionEnd === 0) {
+        if (
+          e.key === "ArrowUp" &&
+          el.selectionStart === 0 &&
+          el.selectionEnd === 0
+        ) {
           if (index > 0) {
             e.preventDefault();
             const prev = state.rows[index - 1];
-            dispatch({ type: 'focusRow', id: prev.id, offset: 0 });
+            dispatch({ type: "focusRow", id: prev.id, offset: 0 });
           }
           return;
         }
         if (
-          e.key === 'ArrowDown' &&
+          e.key === "ArrowDown" &&
           el.selectionStart === el.value.length &&
           el.selectionEnd === el.value.length
         ) {
@@ -190,7 +231,7 @@ export function useChecklist(options?: {
             e.preventDefault();
             const next = state.rows[index + 1];
             dispatch({
-              type: 'focusRow',
+              type: "focusRow",
               id: next.id,
               offset: Math.min(el.selectionStart, next.text.length),
             });
@@ -198,11 +239,11 @@ export function useChecklist(options?: {
         }
       },
       onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => {
-        const text = e.clipboardData.getData('text/plain');
-        if (!text.includes('\n')) return; // single-line pastes use native behavior
+        const text = e.clipboardData.getData("text/plain");
+        if (!text.includes("\n")) return; // single-line pastes use native behavior
         e.preventDefault();
         const el = e.currentTarget;
-        dispatch({ type: 'pasteText', id, offset: el.selectionStart, text });
+        dispatch({ type: "pasteText", id, offset: el.selectionStart, text });
       },
       onCompositionStart: () => {
         composing.current = true;
@@ -218,10 +259,10 @@ export function useChecklist(options?: {
       onFocus: (e: FocusEvent<HTMLTextAreaElement>) => {
         if (applyingFocus.current) return;
         dispatch({
-          type: 'focusRow',
+          type: "focusRow",
           id,
           offset: e.currentTarget.selectionStart ?? 0,
-          origin: 'dom',
+          origin: "dom",
         });
       },
       onSelect: (e: SyntheticEvent<HTMLTextAreaElement>) => {
@@ -235,7 +276,12 @@ export function useChecklist(options?: {
         ) {
           return;
         }
-        dispatch({ type: 'focusRow', id, offset: el.selectionStart, origin: 'dom' });
+        dispatch({
+          type: "focusRow",
+          id,
+          offset: el.selectionStart,
+          origin: "dom",
+        });
       },
     };
   }
@@ -245,7 +291,7 @@ export function useChecklist(options?: {
     return {
       tabIndex: -1,
       onPointerDown: (e: React.PointerEvent) => e.preventDefault(),
-      onClick: () => dispatch({ type: 'toggleDone', id }),
+      onClick: () => dispatch({ type: "toggleDone", id }),
     };
   }
 

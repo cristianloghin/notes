@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { Toolbar, useChecklist } from '../src/lib';
 import './styles.css';
 
+// DEBUG: disables every scroll our code initiates — the hook's
+// focused-row reveal (scrollOnFocus: false) and the page-scroll pinning in
+// useVisualViewportBox. With this true, any remaining jump is Safari's own
+// behavior, not ours. Flip back to false after testing.
+const DISABLE_APP_SCROLL = true;
+
 /**
  * Track the visual viewport so the app shell can be sized to exactly the
  * on-screen area above the soft keyboard. The page itself never scrolls
@@ -26,7 +32,12 @@ function useVisualViewportBox() {
       // through React state it reacts a frame late and visibly jumps on
       // every tap into a row. Pin the page scroll synchronously inside the
       // event instead, then read the viewport.
-      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+      if (
+        !DISABLE_APP_SCROLL &&
+        (window.scrollX !== 0 || window.scrollY !== 0)
+      ) {
+        window.scrollTo(0, 0);
+      }
       setBox((prev) => {
         const next = {
           height: vv.height,
@@ -67,7 +78,7 @@ Ask at the store which primer works on old plaster.`;
 export default function App() {
   const [showMarkdown, setShowMarkdown] = useState(false);
   const { rows, focus, dispatch, getRowProps, getCheckboxProps, toMarkdown } =
-    useChecklist({ initial: SAMPLE });
+    useChecklist({ initial: SAMPLE, scrollOnFocus: !DISABLE_APP_SCROLL });
   const viewport = useVisualViewportBox();
 
   return (
