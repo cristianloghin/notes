@@ -66,14 +66,12 @@ function MarkdownPreview({ markdown }: { markdown: string }) {
 export default function App() {
   const [showMarkdown, setShowMarkdown] = useState(false);
   // Seeded with the source markdown (it round-trips identically); after
-  // that, updated exclusively by the store's onRowsChange callback.
+  // that, updated exclusively through the store's onRowsChange listener.
   const [markdown, setMarkdown] = useState(SAMPLE);
-  const [note] = useState(
-    () =>
-      new NoteStore({
-        initial: SAMPLE,
-        onRowsChange: (rows) => setMarkdown(serialize(rows)),
-      }),
+  const [note] = useState(() => new NoteStore({ initial: SAMPLE }));
+  useEffect(
+    () => note.onRowsChange((rows) => setMarkdown(serialize(rows))),
+    [note],
   );
   const dock = useKeyboardDock();
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -123,7 +121,9 @@ export default function App() {
               <button
                 className="bar-btn"
                 onPointerDown={(e) => e.preventDefault()}
-                onClick={() => navigator.clipboard.writeText(note.toMarkdown())}
+                onClick={() =>
+                  navigator.clipboard.writeText(serialize(note.getState().rows))
+                }
               >
                 Copy MD
               </button>

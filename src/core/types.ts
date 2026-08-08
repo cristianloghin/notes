@@ -1,5 +1,9 @@
 export type RowId = string;
 
+/** Mints ids for newly created rows. Hosts inject one via
+    `new NoteStore({ genId })` to get DB-compatible ids. */
+export type GenId = () => RowId;
+
 export type HeaderRow = { id: RowId; type: 'header'; text: string };
 export type ItemRow = { id: RowId; type: 'item'; text: string; done: boolean };
 export type TextRow = { id: RowId; type: 'text'; text: string };

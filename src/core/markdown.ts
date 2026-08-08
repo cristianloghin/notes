@@ -1,10 +1,12 @@
-import { genId } from './id';
-import type { Row } from './types';
+import { defaultGenId } from './id';
+import type { GenId, Row } from './types';
 
 const ITEM_RE = /^- \[([ xX])\] ?(.*)$/;
 
-/** Parse markdown into rows. Also serves as the paste handler (spec §8). */
-export function parseMarkdown(src: string): Row[] {
+/** Parse markdown into rows. Also serves as the paste handler (spec §8).
+    All row ids are minted through `genId` so a host-injected factory
+    covers parsed rows too — including the paste path. */
+export function parseMarkdown(src: string, genId: GenId = defaultGenId): Row[] {
   const rows: Row[] = [];
   for (const raw of src.split('\n')) {
     const line = raw.replace(/\r$/, '');

@@ -10,11 +10,11 @@ export {
   type CheckboxProps,
 } from "./react/Editor";
 export { Toolbar, type ToolbarRenderProps } from "./react/Toolbar";
-export { reducer, createInitialState } from "./core/reducer";
 export { parseMarkdown, serialize } from "./core/markdown";
 export type {
   Row,
   RowId,
+  GenId,
   HeaderRow,
   ItemRow,
   TextRow,

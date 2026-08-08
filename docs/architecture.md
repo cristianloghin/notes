@@ -25,10 +25,11 @@ src/index.ts — the public surface; the only module consumers import from.
   reducer is the product; `NoteStore` is its thin observable wrapper —
   state lives in the instance, components subscribe. Consumers create the
   instance and hand it to `NoteProvider`; nothing else is threaded through
-  props. The store's `onRowsChange` callback (rows changes only, never
-  caret-only updates, fired after subscribers) is the integration seam a
-  consumer app persists from — this supersedes the old `useChecklist
-  onChange` option and is step one of the §4 adapter roadmap.
+  props. The store's `onRowsChange(fn): unsubscribe` registration (rows
+  changes only, never caret-only updates, fired after subscribers) is the
+  integration seam a consumer app persists from — step one of the §4
+  adapter roadmap. The store does not serialize; string-grain hosts call
+  `serialize(store.getState().rows)`.
 - **Binding** owns exactly three jobs: providing the store through context
   (`useSyncExternalStore`), translating DOM input events into actions, and
   applying `state.focus` to the DOM (the focus contract, spec §6). It
@@ -92,11 +93,16 @@ earned through a bug.
 Declared in `src/index.ts`:
 
 - `NoteStore`, `NoteProvider`, `useNote`
-- `Editor`, `Toolbar`, `reducer`, `createInitialState`
+- `Editor`, `Toolbar`
 - `parseMarkdown`, `serialize`
-- The types: `Row`, `RowId`, `Caret`, `State`, `Action` (and row variants,
-  `ToolbarRenderProps`, `EditorRowRenderProps`, `FieldProps`,
+- The types: `Row`, `RowId`, `GenId`, `Caret`, `State`, `Action` (and row
+  variants, `ToolbarRenderProps`, `EditorRowRenderProps`, `FieldProps`,
   `CheckboxProps`)
+
+`reducer` and `createInitialState` are deliberately NOT exported: the
+`NoteStore` instance is the only supported state owner. Publishing the raw
+reducer would create a second ownership path that every future store
+capability (action observation, external updates) would have to duplicate.
 
 `useChecklist` is gone: the hook owned state, DOM glue, and API surface in
 one closure, which forced prop-threading into every component. The store
@@ -130,13 +136,15 @@ Capabilities the library must grow to support row-grain adapters, in
 dependency order (these supersede the vaguer "0.4 persistence adapters"
 phase in the spec):
 
-1. `src/index.ts` — declared surface (§3).
-2. **Injectable id factory** — `new NoteStore({ genId })` so a host can mint
-   DB-compatible ids at row creation. Also resolves the reducer-purity
-   finding: the default factory stays, but the reducer's determinism is the
-   host's choice.
+1. `src/index.ts` — declared surface (§3). *Done.*
+2. **Injectable id factory** — *done*: `new NoteStore({ genId })`; the
+   factory threads through `reducer`, `createInitialState`, and
+   `parseMarkdown` (defaulted to the library's), so splits, pastes, and
+   parses all mint through one path. Determinism is the host's choice.
 3. **Action observation** — `onAction(action, prevRows, nextRows)` so an
-   adapter can translate edits into host writes without diffing.
+   adapter can translate edits into host writes without diffing. Must be a
+   registration (returning unsubscribe), like `subscribe`/`onRowsChange` —
+   never a constructor option.
 4. **External updates / controlled mode** — accepting host-side row changes
    (e.g. realtime edits from another device) without clobbering local focus
    and caret. Design constraint: the reconciliation must preserve settled
@@ -148,19 +156,28 @@ absorbs them): commit debouncing, edit-session guards (Planner's
 
 ## 5. Open findings
 
-From the 2026-08 architecture review, still open, with disposition:
+Still open, with disposition (details in the reviewer's memory,
+`review-open-findings-notes.md`):
 
-- **(3) Rendering concerns in the binding** — autosize, `CSS.supports`
-  probe, `scrollIntoView`. *Accepted direction:* move to skin; keyboard
-  avoidance gets exactly one owner. Do before adding any second skin.
-- **(5) No `lib/index.ts`** — *resolved*: `src/index.ts` declares the
-  surface and the demo consumes only it.
-- **(6) `beforeinput` wired via ref-callback expando** — *accepted
-  direction:* one delegated listener via `getContainerProps`.
-- **(7) Non-deterministic ids in the reducer** — *superseded* by the
-  injectable id factory (§4.2).
+- **Reveal policy in the binding** — *partially addressed 2026-08-08*: the
+  iOS opacity blink is removed (obsolete since the static-layout redesign
+  made Safari's focus-reveal pan the desired behavior); `scrollIntoView`
+  and autosize remain in the binding, `scrollIntoView` gated by
+  `scrollOnFocus`. Full move-to-skin still open; do before any second skin.
+- **`beforeinput` wired via ref-callback expando** — *accepted direction:*
+  one delegated listener on the container `Editor` owns.
+- **`Toolbar` derives document facts** (`activeRow`, `canMoveUp/Down`) —
+  *accepted direction:* move the derivations to core as pure functions of
+  `State` so row-grain hosts can reuse them.
+- **`useNote` returns whole state** (every subscriber re-renders on every
+  change) — *deferred* until it shows up in a host profiler.
 
-Findings 1, 2, 4 from that review are resolved (see settled decisions 1–4).
+Resolved 2026-08-08 (second review): injectable id factory threaded
+through parser/reducer/store; `onRowsChange` as a registration returning
+unsubscribe; `reducer`/`createInitialState` removed from the surface;
+`NoteStore.toMarkdown` removed. First review's findings 1, 2, 4 →
+settled decisions 1–4; finding 5 → `src/index.ts`; finding 7 → superseded
+by the id factory.
 
 ## 6. House rules
 

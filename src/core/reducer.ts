@@ -1,17 +1,20 @@
-import { genId } from './id';
+import { defaultGenId } from './id';
 import { parseMarkdown } from './markdown';
-import type { Action, Row, State } from './types';
+import type { Action, GenId, Row, State } from './types';
 
-export function createInitialState(initial?: Row[] | string): State {
+export function createInitialState(
+  initial?: Row[] | string,
+  genId: GenId = defaultGenId,
+): State {
   let rows: Row[];
-  if (typeof initial === 'string') rows = parseMarkdown(initial);
+  if (typeof initial === 'string') rows = parseMarkdown(initial, genId);
   else if (initial && initial.length > 0) rows = initial;
   else rows = [];
-  if (rows.length === 0) rows = [emptyItem()];
+  if (rows.length === 0) rows = [emptyItem(genId)];
   return { rows, focus: null };
 }
 
-function emptyItem(): Row {
+function emptyItem(genId: GenId): Row {
   return { id: genId(), type: 'item', text: '', done: false };
 }
 
@@ -26,9 +29,15 @@ function reemitFocus(focus: State['focus']): State['focus'] {
 
 /**
  * Pure, DOM-free state reducer. Owns caret placement: every structural
- * action returns `focus` as part of the new state (spec §5, §6).
+ * action returns `focus` as part of the new state (spec §5, §6). All new
+ * row ids are minted through `genId` — one mint path, so a host-injected
+ * factory covers splits, pastes, and the empty-document invariant alike.
  */
-export function reducer(state: State, action: Action): State {
+export function reducer(
+  state: State,
+  action: Action,
+  genId: GenId = defaultGenId,
+): State {
   switch (action.type) {
     case 'setText': {
       const i = indexOf(state, action.id);
@@ -44,6 +53,7 @@ export function reducer(state: State, action: Action): State {
         return reducer(
           { ...state, rows: cleared },
           { type: 'pasteText', id: row.id, offset: 0, text: action.text },
+          genId,
         );
       }
       const rows = state.rows.slice();
@@ -114,7 +124,7 @@ export function reducer(state: State, action: Action): State {
       const rows = state.rows.slice();
       rows.splice(i, 1);
       if (rows.length === 0) {
-        const row = emptyItem();
+        const row = emptyItem(genId);
         return { rows: [row], focus: { id: row.id, offset: 0 } };
       }
       const target = rows[Math.max(0, i - 1)];
@@ -183,7 +193,7 @@ export function reducer(state: State, action: Action): State {
       const i = indexOf(state, action.id);
       if (i < 0) return state;
       const row = state.rows[i];
-      const parsed = parseMarkdown(action.text);
+      const parsed = parseMarkdown(action.text, genId);
       if (parsed.length === 0) return state;
       const rows = state.rows.slice();
 
