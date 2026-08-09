@@ -105,9 +105,12 @@ export default function App() {
   );
   // Store lifetime is this component's; disposal is the hook's job.
   // The host mints DB-compatible ids for rows created in the editor.
+  // NOT crypto.randomUUID: that API exists only in secure contexts
+  // (HTTPS/localhost) — on a LAN-IP dev URL (phone testing) it is
+  // undefined and every id-minting edit (Enter!) would throw.
   const note = useNoteStore({
     initial: INITIAL_ROWS,
-    genId: () => `db-${crypto.randomUUID().slice(0, 8)}`,
+    genId: () => `db-${Math.random().toString(36).slice(2, 10)}`,
   });
   // Simulate the partner's device: flip the first item's done state and
   // apply it as an external update. preventDefault on pointerdown so the
@@ -210,7 +213,8 @@ export default function App() {
                 className="bar-btn"
                 onPointerDown={(e) => e.preventDefault()}
                 onClick={() =>
-                  navigator.clipboard.writeText(serialize(note.getState().rows))
+                  // clipboard API is also secure-context-only; no-op on LAN http
+                  navigator.clipboard?.writeText(serialize(note.getState().rows))
                 }
               >
                 Copy
