@@ -237,7 +237,7 @@ export default function App() {
       <div className="scroll-area">
         <div className="app">
           <header className="topbar">
-            <h1>Checklist POC</h1>
+            <h1>Notes POC</h1>
             <div className="topbar-actions">
               <button
                 className="bar-btn"
