@@ -116,7 +116,7 @@ Declared in `src/index.ts`:
 - The types: `Row`, `RowId`, `GenId`, `Caret`, `State`, `Action` (and row
   variants, `ToolbarRenderProps`, `EditorRowRenderProps`, `FieldProps`,
   `CheckboxProps`, `NoteDoc`, `DocRow`, `DocAttrs`, `DocRowPatch`,
-  `NotePatch`)
+  `NotePatch`, `SerializeOptions`)
 
 `reducer` and `createInitialState` are deliberately NOT exported: the
 `NoteStore` instance is the only supported state owner. Publishing the raw
@@ -198,8 +198,9 @@ The stored shape is split **by lifecycle, not by the row union**:
 
 ```json
 {
-  "rows":  { "b": { "type": "item", "text": "screws", "sort": "a1" } },
-  "attrs": { "done": { "b": true } }
+  "rows":  { "b": { "type": "item", "text": "screws", "sort": "a1" },
+             "c": { "type": "item", "text": "hinges", "sort": "a2" } },
+  "attrs": { "done": { "b": true }, "deleted": { "c": true } }
 }
 ```
 
@@ -245,7 +246,27 @@ Rules that follow, and where they are owned:
    uses the item each group starts at. A host whose synthesized rows
    carry any state of their own should give them real ids instead.
    (2026-09-03.)
-6. **This shape is storage, never the model.** `Row[]` stays flat and
+6. **Deletion is a tombstone, never a removal.** A deleted row keeps its
+   `rows` entry and is marked in `attrs.deleted`; `parseDoc` filters it out
+   and `serializeDoc` tombstones anything its `previous` knew and the new
+   rows no longer have. This is what makes a patch safe to apply late: a
+   patch naming a row the base has dropped is otherwise indistinguishable
+   from a one-off add, so merging resurrects the deleted row as a fragment
+   with no type and no position. With tombstones an id in the base is a
+   real target, live or dead, and an id absent from the base is genuinely
+   new. It also makes hiding reversible — `rows.<id>: null` discards the
+   text and sort key, a tombstone keeps them.
+
+   The cost is that documents only grow, and ordinary drafting is enough to
+   do it: Enter-then-backspace is a normal rhythm, and every transient row
+   it creates is preserved forever. `serializeDoc`'s `deletes: 'drop'`
+   removes those rows outright and sweeps existing tombstones instead, for
+   documents nothing can hold a reference into. It is an argument, not a
+   property of the document, because only the writer knows whether a patch
+   exists elsewhere — and a client cannot cache that claim, since a patch
+   written on another device mid-session would make dropping unsafe in the
+   window hardest to notice. (2026-09-03.)
+7. **This shape is storage, never the model.** `Row[]` stays flat and
    array-shaped; the reducer, the focus contract and `applyExternalRows`
    would all pay a join for the normalization and gain nothing. The two
    representations meet in `doc.ts` and nowhere else.

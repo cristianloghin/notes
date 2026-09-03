@@ -21,6 +21,7 @@ export {
   type DocAttrs,
   type DocRowPatch,
   type NotePatch,
+  type SerializeOptions,
 } from "./core/doc";
 export { keyBetween, keysBetween, isValidKey } from "./core/sortkey";
 export type {

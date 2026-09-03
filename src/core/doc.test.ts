@@ -254,3 +254,90 @@ describe('serializeDoc', () => {
     expect(next.attrs?.done).toEqual({ i2: true });
   });
 });
+
+describe('tombstones', () => {
+  const deleted = (doc: NoteDoc, id: string) =>
+    serializeDoc(parseDoc(doc).filter((r) => r.id !== id), doc);
+
+  it('keeps a removed row in the document and marks it', () => {
+    const doc = base();
+    const next = deleted(doc, 'i2');
+
+    expect(next.rows.i2).toEqual(doc.rows.i2); // entry survives intact
+    expect(next.attrs?.deleted).toEqual({ i2: true });
+    expect(parseDoc(next).map((r) => r.id)).toEqual(['h1', 'i1', 't1']);
+  });
+
+  it('gives a stale patch something to land on instead of a fragment', () => {
+    const stale = mergeDoc(deleted(base(), 'i2'), {
+      rows: { i2: { text: 'brass hinges' } },
+    });
+    // The edit applies to a row nobody can see, rather than reviving it.
+    expect(stale.rows.i2.text).toBe('brass hinges');
+    expect(parseDoc(stale).map((r) => r.id)).toEqual(['h1', 'i1', 't1']);
+  });
+
+  it('tells a one-off add from a corpse by presence in the base', () => {
+    const doc = base();
+    const withAdd = mergeDoc(deleted(doc, 'i2'), {
+      rows: {
+        extra: {
+          type: 'item',
+          text: 'washers',
+          sort: keyBetween(doc.rows.i1.sort, doc.rows.i2.sort),
+        },
+      },
+    });
+    expect(parseDoc(withAdd).map((r) => r.id)).toEqual(['h1', 'i1', 'extra', 't1']);
+  });
+
+  it('revives a row with its content and position, but not its state', () => {
+    const revived = mergeDoc(deleted(base(), 'i2'), {
+      attrs: { deleted: { i2: null } },
+    });
+    const rows = parseDoc(revived);
+    expect(rows.map((r) => r.id)).toEqual(['h1', 'i1', 'i2', 't1']);
+    // i2 was ticked before the delete; reviving restores the line, not the tick.
+    expect(rows[2]).toEqual({ id: 'i2', type: 'item', text: 'hinges', done: false });
+  });
+
+  it('re-tombstones across repeated writes', () => {
+    const once = deleted(base(), 'i2');
+    const twice = serializeDoc(parseDoc(once), once);
+    expect(twice.attrs?.deleted).toEqual({ i2: true });
+    expect(twice.rows.i2).toBeDefined();
+  });
+});
+
+describe('deletes: drop', () => {
+  const without = (doc: NoteDoc, id: string, drop = true) =>
+    serializeDoc(
+      parseDoc(doc).filter((r) => r.id !== id),
+      doc,
+      drop ? { deletes: 'drop' } : undefined,
+    );
+
+  it('removes the row outright instead of marking it', () => {
+    const next = without(base(), 'i2');
+    expect(next.rows).not.toHaveProperty('i2');
+    // Nothing left in attrs at all, so the key is omitted entirely.
+    expect(next.attrs?.deleted).toBeUndefined();
+    expect(parseDoc(next).map((r) => r.id)).toEqual(['h1', 'i1', 't1']);
+  });
+
+  it('sweeps tombstones the previous document already carried', () => {
+    const tombstoned = without(base(), 'i2', false);
+    expect(tombstoned.attrs?.deleted).toEqual({ i2: true });
+
+    // A later write in drop mode clears what an earlier one had marked.
+    const swept = serializeDoc(parseDoc(tombstoned), tombstoned, {
+      deletes: 'drop',
+    });
+    expect(swept.rows).not.toHaveProperty('i2');
+    expect(swept.attrs?.deleted).toBeUndefined();
+  });
+
+  it('defaults to tombstoning when no option is given', () => {
+    expect(without(base(), 'i2', false).attrs?.deleted).toEqual({ i2: true });
+  });
+});

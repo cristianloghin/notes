@@ -7,6 +7,7 @@ import {
   type NotePatch,
   type Row,
   type RowId,
+  type SerializeOptions,
 } from "../../src";
 
 /**
@@ -66,35 +67,60 @@ function insertPatch(action: Action, prevRows: Row[], nextRows: Row[], doc: Note
   return { rows };
 }
 
-/** Delete-shaped edits: the vanished rows null out, the survivor absorbed
-    their text. */
-function deletePatch(prevRows: Row[], nextRows: Row[]): NotePatch {
+/**
+ * Delete-shaped edits: the vanished rows go, and the survivor absorbed
+ * their text.
+ *
+ * Under `tombstone` the row is marked, not removed, so a patch written
+ * against it still lands. Under `drop` it is nulled outright — which is
+ * only safe while nothing can reference it, and is what keeps a note being
+ * drafted from accumulating ghosts for rows the user created and removed
+ * in the same breath.
+ */
+function deletePatch(
+  prevRows: Row[],
+  nextRows: Row[],
+  options?: SerializeOptions,
+): NotePatch {
   const surviving = new Set(nextRows.map((r) => r.id));
   const rows: NonNullable<NotePatch["rows"]> = {};
+  const deleted: Record<RowId, boolean> = {};
 
   for (const row of prevRows) {
-    if (!surviving.has(row.id)) rows[row.id] = null;
+    if (surviving.has(row.id)) continue;
+    if (options?.deletes === "drop") rows[row.id] = null;
+    else deleted[row.id] = true;
   }
   for (const row of nextRows) {
     const before = prevRows.find((r) => r.id === row.id);
     if (before && before.text !== row.text) rows[row.id] = { text: row.text };
   }
 
-  return { rows };
+  const patch: NotePatch = {};
+  if (Object.keys(rows).length > 0) patch.rows = rows;
+  if (Object.keys(deleted).length > 0) patch.attrs = { deleted };
+  return patch;
 }
 
 /** Last resort for an action this adapter doesn't model: restate every
     row and every checkbox. The one case that does clone the note. */
-function fullPatch(nextRows: Row[], doc: NoteDoc): NotePatch {
-  const next = serializeDoc(nextRows, doc);
+function fullPatch(
+  nextRows: Row[],
+  doc: NoteDoc,
+  options?: SerializeOptions,
+): NotePatch {
+  const next = serializeDoc(nextRows, doc, options);
   const rows: NonNullable<NotePatch["rows"]> = {};
   const done: Record<RowId, boolean> = {};
 
+  // Anything serializeDoc did not carry forward has to be nulled explicitly:
+  // a merge patch that simply omits a key leaves the stored row in place.
+  // Under `tombstone` this is a no-op, since removed rows are still there.
   for (const id of Object.keys(doc.rows)) if (!next.rows[id]) rows[id] = null;
   for (const [id, row] of Object.entries(next.rows)) rows[id] = row;
   for (const row of nextRows) if (row.type === "item") done[row.id] = row.done;
 
-  return { rows, attrs: { done } };
+  return { rows, attrs: { done, deleted: next.attrs?.deleted ?? {} } };
 }
 
 export function actionToPatch(
@@ -102,6 +128,7 @@ export function actionToPatch(
   prevRows: Row[],
   nextRows: Row[],
   doc: NoteDoc,
+  options?: SerializeOptions,
 ): NotePatch {
   switch (action.type) {
     case "toggleDone": {
@@ -137,7 +164,7 @@ export function actionToPatch(
       return insertPatch(action, prevRows, nextRows, doc);
     case "mergeBackward":
     case "remove":
-      return deletePatch(prevRows, nextRows);
+      return deletePatch(prevRows, nextRows, options);
     case "move": {
       const at = nextRows.findIndex((r) => r.id === action.id);
       if (at < 0) break;
@@ -151,5 +178,5 @@ export function actionToPatch(
       };
     }
   }
-  return fullPatch(nextRows, doc);
+  return fullPatch(nextRows, doc, options);
 }

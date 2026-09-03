@@ -11,6 +11,7 @@ import {
   useOnRowsChange,
   type NoteDoc,
   type NotePatch,
+  type SerializeOptions,
 } from "../src";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
@@ -101,10 +102,20 @@ function PlannerPreview({ items }: { items: PlannerItem[] }) {
  * patches alone reproduces the editor's rows, the incremental write path
  * is correct and nothing ever had to clone the note.
  */
-function DocPreview({ stored }: { stored: Stored }) {
+function DocPreview({
+  stored,
+  deletes,
+  onDeletes,
+}: {
+  stored: Stored;
+  deletes: NonNullable<SerializeOptions["deletes"]>;
+  onDeletes: (next: NonNullable<SerializeOptions["deletes"]>) => void;
+}) {
   const { state } = useNote();
   const inSync =
     JSON.stringify(parseDoc(stored.doc)) === JSON.stringify(state.rows);
+  const ghosts = Object.keys(stored.doc.attrs?.deleted ?? {}).length;
+  const kept = Object.keys(stored.doc.rows).length;
   return (
     <div>
       <p className={inSync ? "sync-ok" : "sync-off"}>
@@ -112,6 +123,22 @@ function DocPreview({ stored }: { stored: Stored }) {
           ? "merging patches alone reconstructs the editor exactly"
           : "diverged — a partner push is not an edit, so it emits no patch"}
       </p>
+      <div className="doc-modes">
+        {(["tombstone", "drop"] as const).map((mode) => (
+          <button
+            key={mode}
+            className={`bar-btn${deletes === mode ? " is-on" : ""}`}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => onDeletes(mode)}
+          >
+            {mode}
+          </button>
+        ))}
+        <span className="doc-count">
+          {kept} stored · {state.rows.length} visible · {ghosts} ghost
+          {ghosts === 1 ? "" : "s"}
+        </span>
+      </div>
       <pre className="md-preview">{JSON.stringify(stored.doc, null, 2)}</pre>
       <p className="hint">
         Content in <code>rows</code>, checkbox state in{" "}
@@ -127,7 +154,11 @@ function DocPreview({ stored }: { stored: Stored }) {
       <p className="hint">
         One edit → one override, newest first. Ticking a box names only that
         box; inserting a row mints one sort key and leaves its neighbours
-        alone.
+        alone. Under <code>tombstone</code> a deleted row is kept and marked,
+        so a patch written against it still lands; under <code>drop</code> it
+        is nulled outright — safe only while nothing can reference it, which
+        is what keeps a note being drafted free of ghosts. Press Enter and
+        backspace it away a few times under each to see the difference.
       </p>
     </div>
   );
@@ -153,6 +184,10 @@ export default function App() {
   const [panel, setPanel] = useState<
     "none" | "md" | "planner" | "writes" | "doc"
   >("none");
+  // Whether a removed row is kept and marked, or nulled outright. The host
+  // owns this: only it knows whether any patch could reference the row.
+  const [deletes, setDeletes] =
+    useState<NonNullable<SerializeOptions["deletes"]>>("tombstone");
   // Store lifetime is this component's; disposal is the hook's job.
   // The host mints DB-compatible ids for rows created in the editor.
   // NOT crypto.randomUUID: that API exists only in secure contexts
@@ -187,7 +222,9 @@ export default function App() {
   const stored = useOnAction<Stored>(
     note,
     (previous, action, prevRows, nextRows) => {
-      const patch = actionToPatch(action, prevRows, nextRows, previous.doc);
+      const patch = actionToPatch(action, prevRows, nextRows, previous.doc, {
+        deletes,
+      });
       return {
         doc: mergeDoc(previous.doc, patch),
         patches: [patch, ...previous.patches].slice(0, 6),
@@ -314,7 +351,11 @@ export default function App() {
           {panel === "writes" && <WritesPreview writes={writes} />}
           {panel === "doc" && (
             <NoteProvider store={note}>
-              <DocPreview stored={stored} />
+              <DocPreview
+                stored={stored}
+                deletes={deletes}
+                onDeletes={setDeletes}
+              />
             </NoteProvider>
           )}
         </div>

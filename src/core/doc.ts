@@ -43,7 +43,31 @@ export type DocRow = {
  */
 export type DocAttrs = {
   done?: Record<RowId, boolean>;
+  /**
+   * Tombstones. A deleted row keeps its entry in `rows` and is marked here
+   * instead of being removed, so a patch addressing it still lands on
+   * something real. Without that, a patch entry for a row the base no
+   * longer has is indistinguishable from a one-off add, and merging
+   * resurrects deleted rows as fragments.
+   */
+  deleted?: Record<RowId, boolean>;
   [namespace: string]: Record<RowId, unknown> | undefined;
+};
+
+/**
+ * How `serializeDoc` records a row the previous document had and the new
+ * rows no longer do.
+ *
+ * `'tombstone'` (the default) keeps the row's entry and marks it in
+ * `attrs.deleted`, so a patch written against it still lands on something
+ * real. `'drop'` removes it outright, and also clears tombstones the
+ * previous document already carried — correct only when nothing can
+ * reference these rows, i.e. no patch has ever been written against this
+ * document. Only the writer knows that; the codec cannot infer it, which
+ * is why this is an argument rather than a property of the document.
+ */
+export type SerializeOptions = {
+  deletes?: 'tombstone' | 'drop';
 };
 
 /** A row patch may null out a field, which resets it to its default. */
@@ -115,11 +139,14 @@ export function mergeDoc(base: NoteDoc, ...patches: NotePatch[]): NoteDoc {
  */
 export function parseDoc(doc: NoteDoc): Row[] {
   const done = doc.attrs?.done ?? {};
-  const entries = Object.entries(doc.rows ?? {}).map(([id, raw]) => ({
-    id,
-    sort: isValidKey(raw?.sort) ? raw.sort : null,
-    raw,
-  }));
+  const deleted = doc.attrs?.deleted ?? {};
+  const entries = Object.entries(doc.rows ?? {})
+    .filter(([id]) => deleted[id] !== true)
+    .map(([id, raw]) => ({
+      id,
+      sort: isValidKey(raw?.sort) ? raw.sort : null,
+      raw,
+    }));
 
   entries.sort((a, b) => {
     if (a.sort !== null && b.sort !== null) {
@@ -151,11 +178,34 @@ export function parseDoc(doc: NoteDoc): Row[] {
  *
  * Hosts that write incrementally do not need this at all: derive patches
  * from `onAction` and let the editor's edits become targeted writes.
+ *
+ * `options.deletes` chooses between tombstoning removed rows and dropping
+ * them; see `SerializeOptions`. Dropping is also the sweep — it clears
+ * tombstones the previous document already held.
  */
-export function serializeDoc(rows: Row[], previous?: NoteDoc): NoteDoc {
+export function serializeDoc(
+  rows: Row[],
+  previous?: NoteDoc,
+  options?: SerializeOptions,
+): NoteDoc {
   const keys = assignKeys(rows, previous);
   const out: Record<RowId, DocRow> = {};
   const done: Record<RowId, boolean> = {};
+  const deleted: Record<RowId, boolean> = {};
+  const live = new Set(rows.map((r) => r.id));
+
+  // A row the document knew and no longer has is tombstoned, not dropped:
+  // its entry stays so patches addressing it still land, and `parseDoc`
+  // filters it out of the read. Already-tombstoned rows re-tombstone by the
+  // same path, since they are absent from `rows` too — and under
+  // `deletes: 'drop'` they are swept by the same path, for the same reason.
+  if (options?.deletes !== 'drop') {
+    for (const [id, row] of Object.entries(previous?.rows ?? {})) {
+      if (live.has(id)) continue;
+      out[id] = row;
+      deleted[id] = true;
+    }
+  }
 
   rows.forEach((row, i) => {
     // Strict, unlike parseDoc: `rows` is keyed by id, so a duplicate here
@@ -168,8 +218,9 @@ export function serializeDoc(rows: Row[], previous?: NoteDoc): NoteDoc {
     if (row.type === 'item' && row.done) done[row.id] = true;
   });
 
-  const attrs = carryAttrs(previous, new Set(rows.map((r) => r.id)));
+  const attrs = carryAttrs(previous, live);
   if (Object.keys(done).length > 0) attrs.done = done;
+  if (Object.keys(deleted).length > 0) attrs.deleted = deleted;
   return withAttrs(out, attrs);
 }
 
@@ -233,7 +284,10 @@ function cloneAttrs(attrs: DocAttrs | undefined): DocAttrs {
 function carryAttrs(previous: NoteDoc | undefined, live: Set<RowId>): DocAttrs {
   const out: DocAttrs = {};
   for (const [namespace, map] of Object.entries(previous?.attrs ?? {})) {
-    if (namespace === 'done' || !map) continue; // rebuilt from the rows
+    // done and deleted are rebuilt from the rows; a tombstoned row's other
+    // attrs are collected, so reviving one restores its content, not its
+    // state.
+    if (namespace === 'done' || namespace === 'deleted' || !map) continue;
     const kept: Record<RowId, unknown> = {};
     for (const [id, value] of Object.entries(map)) {
       if (live.has(id)) kept[id] = value;

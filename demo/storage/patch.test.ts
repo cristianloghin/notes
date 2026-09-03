@@ -7,6 +7,7 @@ import {
   type NoteDoc,
   type NotePatch,
   type Row,
+  type SerializeOptions,
 } from "../../src";
 import { actionToPatch } from "./patch";
 
@@ -24,7 +25,7 @@ let minted = 0;
  * `sync()` is the property every test asserts: replaying the patch stream
  * into the stored document reproduces the editor exactly.
  */
-function host() {
+function host(options?: SerializeOptions) {
   minted = 0;
   const store = new NoteStore({
     initial: ROWS,
@@ -34,7 +35,7 @@ function host() {
   const patches: NotePatch[] = [];
 
   store.onAction((action, prevRows, nextRows) => {
-    const patch = actionToPatch(action, prevRows, nextRows, doc);
+    const patch = actionToPatch(action, prevRows, nextRows, doc, options);
     patches.push(patch);
     doc = mergeDoc(doc, patch);
   });
@@ -104,13 +105,27 @@ describe("actionToPatch", () => {
     h.sync();
   });
 
-  it("nulls a removed row and carries the merged text to the survivor", () => {
+  it("tombstones a removed row and carries its text to the survivor", () => {
     const h = host();
     h.store.dispatch({ type: "mergeBackward", id: "i2" });
-    expect(h.patches[0].rows?.i2).toBeNull();
-    expect(h.doc.rows).not.toHaveProperty("i2");
+
+    expect(h.patches[0].attrs?.deleted).toEqual({ i2: true });
+    expect(h.patches[0].rows).not.toHaveProperty("i2");
+    // The row stays in the document so later patches still land on it.
+    expect(h.doc.rows.i2).toBeDefined();
+    expect(h.doc.attrs?.deleted?.i2).toBe(true);
     expect(h.doc.rows.i1.text).toBe("screwshinges");
     h.sync();
+  });
+
+  it("does not resurrect a tombstoned row when a stale patch edits it", () => {
+    const h = host();
+    h.store.dispatch({ type: "remove", id: "i2" });
+
+    // A patch from an occurrence that still thought i2 was alive.
+    const stale = mergeDoc(h.doc, { rows: { i2: { text: "brass hinges" } } });
+    expect(parseDoc(stale).map((r) => r.id)).toEqual(["h1", "i1", "i3"]);
+    expect(stale.rows.i2.text).toBe("brass hinges");
   });
 
   it("rewrites exactly one key on a move", () => {
@@ -158,5 +173,42 @@ describe("actionToPatch", () => {
     h.store.applyExternal([{ id: "i1", type: "item", text: "solo", done: true }]);
     expect(h.patches).toHaveLength(0);
     expect(h.doc).toBe(before);
+  });
+});
+
+describe("actionToPatch with deletes: drop", () => {
+  const drop: SerializeOptions = { deletes: "drop" };
+
+  it("nulls the row instead of tombstoning it", () => {
+    const h = host(drop);
+    h.store.dispatch({ type: "remove", id: "i2" });
+
+    expect(h.patches[0].rows?.i2).toBeNull();
+    expect(h.patches[0].attrs).toBeUndefined();
+    expect(h.doc.rows).not.toHaveProperty("i2");
+    expect(h.doc.attrs?.deleted).toBeUndefined();
+    h.sync();
+  });
+
+  it("leaves no ghosts behind while a note is being drafted", () => {
+    const h = host(drop);
+    // The "press Enter, change your mind" rhythm, five times over.
+    for (let i = 0; i < 5; i++) {
+      const rows = h.store.getState().rows;
+      const last = rows[rows.length - 1];
+      h.store.dispatch({ type: "split", id: last.id, offset: last.text.length });
+      const grown = h.store.getState().rows;
+      h.store.dispatch({ type: "mergeBackward", id: grown[grown.length - 1].id });
+    }
+    expect(Object.keys(h.doc.rows)).toHaveLength(ROWS.length);
+    expect(h.doc.attrs?.deleted).toBeUndefined();
+    h.sync();
+  });
+
+  it("still tombstones by default, so the safe path needs no opting in", () => {
+    const h = host();
+    h.store.dispatch({ type: "remove", id: "i2" });
+    expect(h.doc.attrs?.deleted).toEqual({ i2: true });
+    h.sync();
   });
 });
