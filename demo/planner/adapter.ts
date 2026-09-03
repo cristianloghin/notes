@@ -7,8 +7,16 @@ import type { PlannerItem } from "./data";
  * Never goes through markdown: ids and per-item metadata must survive.
  *
  * Mapping:
- * - Planner groupLabel boundaries → header rows (synthesized ids; headers
- *   are not list items in Planner).
+ * - Planner groupLabel boundaries → header rows. Planner has no header
+ *   rows, so their identity is synthesized from the item each group
+ *   STARTS at — never from the label. Labels are not unique ("Pants"
+ *   twice in one list is legal) and they change when the user edits the
+ *   header, so a label-derived id both collides and moves: two groups
+ *   collapsed into one stored key, and renaming a header orphaned
+ *   everything keyed to it. KNOWN WEAKNESS of the replacement: deleting
+ *   or reordering a group's first item changes the header's id on the
+ *   next load. A real adapter gives groups their own rows with their own
+ *   ids — which is what Planner should do if headers gain any state.
  * - Notes item rows → list items; id is the Planner id (new rows carry
  *   host-minted ids via NoteStore's genId).
  * - Metadata the editor doesn't model (personId, dueOn, createdAt) is
@@ -26,8 +34,9 @@ export function plannerToRows(items: PlannerItem[]): Row[] {
     if (item.groupLabel !== currentGroup) {
       currentGroup = item.groupLabel;
       if (item.groupLabel != null) {
+        // Unique and stable under renaming, because item ids are.
         rows.push({
-          id: `group:${item.groupLabel}`,
+          id: `group:${item.id}`,
           type: "header",
           text: item.groupLabel,
         });

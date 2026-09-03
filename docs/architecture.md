@@ -233,7 +233,19 @@ Rules that follow, and where they are owned:
 4. **Referential integrity is the codec's job**, not the format's:
    `parseDoc` ignores attrs naming absent rows, `serializeDoc` collects
    them.
-5. **This shape is storage, never the model.** `Row[]` stays flat and
+5. **Row ids must be unique, and identity must not be derived from
+   text.** The stored `rows` object is keyed by id, so a duplicate
+   overwrites its twin — `serializeDoc` therefore throws rather than
+   dropping a row. This bites hosts that *synthesize* rows: the demo's
+   Planner adapter built header ids from the group label, which is
+   neither unique (two "Pants" groups are legal) nor stable (renaming the
+   header moved the id), so a note silently lost a row on save and
+   renaming orphaned everything keyed to that header. Synthesized rows
+   take identity from something that already has it — the adapter now
+   uses the item each group starts at. A host whose synthesized rows
+   carry any state of their own should give them real ids instead.
+   (2026-09-03.)
+6. **This shape is storage, never the model.** `Row[]` stays flat and
    array-shaped; the reducer, the focus contract and `applyExternalRows`
    would all pay a join for the normalization and gain nothing. The two
    representations meet in `doc.ts` and nowhere else.

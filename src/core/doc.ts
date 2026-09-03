@@ -158,6 +158,12 @@ export function serializeDoc(rows: Row[], previous?: NoteDoc): NoteDoc {
   const done: Record<RowId, boolean> = {};
 
   rows.forEach((row, i) => {
+    // Strict, unlike parseDoc: `rows` is keyed by id, so a duplicate here
+    // would overwrite its twin and drop a row on the way to storage. In a
+    // Row[] a duplicate id is wrong but survivable; in this shape it is
+    // silent data loss, which deserves a loud failure at the write
+    // boundary instead.
+    if (out[row.id] !== undefined) throw new Error(`duplicate row id: ${row.id}`);
     out[row.id] = { type: row.type, text: row.text, sort: keys[i] };
     if (row.type === 'item' && row.done) done[row.id] = true;
   });

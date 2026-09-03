@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { NoteStore } from "../../src";
+import { NoteStore, parseDoc, serializeDoc } from "../../src";
 import { plannerToRows, rowsToPlanner } from "./adapter";
-import { SAMPLE_PLANNER } from "./data";
+import { SAMPLE_PLANNER, type PlannerItem } from "./data";
+
+/** Two groups sharing a label — legal in Planner, and the case that a
+    label-derived header id used to collapse. */
+const REPEATED_LABEL: PlannerItem[] = [
+  { id: "db-1", title: "jeans", groupLabel: "Pants", sortOrder: 0 },
+  { id: "db-2", title: "shirt", groupLabel: "Tops", sortOrder: 1 },
+  { id: "db-3", title: "chinos", groupLabel: "Pants", sortOrder: 2 },
+].map((partial) => ({
+  done: false,
+  personId: null,
+  dueOn: null,
+  createdAt: "2026-01-01T00:00:00Z",
+  ...partial,
+}));
 
 describe("plannerToRows", () => {
   it("synthesizes header rows at groupLabel boundaries", () => {
@@ -86,5 +100,33 @@ describe("rowsToPlanner", () => {
     const out = rowsToPlanner(store.getState().rows, SAMPLE_PLANNER);
     const para = out.find((i) => i.id === "db-para-1");
     expect(para).toMatchObject({ title: "ask for a quote first", done: false });
+  });
+});
+
+describe("synthesized header identity", () => {
+  it("gives two groups with the same label distinct ids", () => {
+    const rows = plannerToRows(REPEATED_LABEL);
+    const headers = rows.filter((r) => r.type === "header");
+    expect(headers.map((h) => h.text)).toEqual(["Pants", "Tops", "Pants"]);
+    expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
+  });
+
+  it("survives storage — a label-derived id dropped a row here", () => {
+    const rows = plannerToRows(REPEATED_LABEL);
+    const doc = serializeDoc(rows);
+    expect(Object.keys(doc.rows)).toHaveLength(rows.length);
+    expect(parseDoc(doc)).toEqual(rows);
+  });
+
+  it("keeps a header's id when its label is renamed", () => {
+    const rows = plannerToRows(REPEATED_LABEL);
+    const tops = rows.find((r) => r.text === "Tops")!;
+
+    const renamed = rows.map((r) =>
+      r.id === tops.id ? { ...r, text: "Shirts" } : r,
+    );
+    const reloaded = plannerToRows(rowsToPlanner(renamed, REPEATED_LABEL));
+
+    expect(reloaded.find((r) => r.text === "Shirts")?.id).toBe(tops.id);
   });
 });

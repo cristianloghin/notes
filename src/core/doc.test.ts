@@ -24,6 +24,15 @@ describe('round trip', () => {
     expect(doc.rows.i2).not.toHaveProperty('done');
   });
 
+  it('refuses duplicate ids rather than dropping a row', () => {
+    const clashing: Row[] = [
+      { id: 'dup', type: 'header', text: 'Pants' },
+      { id: 'i1', type: 'item', text: 'jeans', done: false },
+      { id: 'dup', type: 'header', text: 'Pants' },
+    ];
+    expect(() => serializeDoc(clashing)).toThrow(/duplicate row id: dup/);
+  });
+
   it('returns an empty array for an empty document', () => {
     expect(parseDoc({ rows: {} })).toEqual([]);
     expect(serializeDoc([])).toEqual({ rows: {} });
