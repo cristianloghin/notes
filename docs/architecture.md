@@ -16,7 +16,8 @@ demo/        skin       (App.tsx, styles.css, main.tsx — outside the package)
     │
 src/react/   binding    (context.tsx, bindings.ts, Editor.tsx, Toolbar.tsx)
     │
-src/core/    core       (types.ts, id.ts, markdown.ts, reducer.ts, store.ts)
+src/core/    core       (types.ts, id.ts, markdown.ts, reducer.ts, store.ts,
+                        sortkey.ts, doc.ts)
 
 src/index.ts — the public surface; the only module consumers import from.
 ```
@@ -107,10 +108,15 @@ Declared in `src/index.ts`:
   `onAction` — persistence seam, not a view feed; views derive from
   `useNote().state`.
 - `Editor`, `Toolbar`
-- `parseMarkdown`, `serialize`
+- `parseMarkdown`, `serialize` — markdown interchange, ids regenerated
+- `parseDoc`, `serializeDoc`, `mergeDoc` — the JSON persistence codec
+  (§4a); id-preserving, unlike markdown
+- `keyBetween`, `keysBetween`, `isValidKey` — fractional sort keys, so a
+  host adapter can mint a key for a row it inserts
 - The types: `Row`, `RowId`, `GenId`, `Caret`, `State`, `Action` (and row
   variants, `ToolbarRenderProps`, `EditorRowRenderProps`, `FieldProps`,
-  `CheckboxProps`)
+  `CheckboxProps`, `NoteDoc`, `DocRow`, `DocAttrs`, `DocRowPatch`,
+  `NotePatch`)
 
 `reducer` and `createInitialState` are deliberately NOT exported: the
 `NoteStore` instance is the only supported state owner. Publishing the raw
@@ -180,6 +186,62 @@ phase in the spec):
 Host-side contracts (the host's job, documented here so the library never
 absorbs them): commit debouncing, edit-session guards (Planner's
 `beginEdit`/`endEdit`), theming via the host's own skin and tokens.
+
+## 4a. The JSON storage shape
+
+*Added 2026-09-03.* Markdown is interchange, not persistence (settled
+decision 7), so until now every host had to write its own id-preserving
+codec. `src/core/doc.ts` is that codec, and `src/core/sortkey.ts` is the
+ordering primitive under it.
+
+The stored shape is split **by lifecycle, not by the row union**:
+
+```json
+{
+  "rows":  { "b": { "type": "item", "text": "screws", "sort": "a1" } },
+  "attrs": { "done": { "b": true } }
+}
+```
+
+- `rows` — authored content, id-keyed, merge-patchable.
+- `attrs.<namespace>` — sparse per-row state. Absent means default;
+  explicit `false` is how an override unchecks what its base checked.
+  `done` is the only namespace the library reads; host namespaces
+  (assignee, dueOn) pass through `serializeDoc` untouched, which is where
+  the §4 "metadata does not enter the core model" rule meets storage.
+- `sort` — a fractional index on each row, so there is no positional
+  array anywhere and *every* operation, insertion and reorder included,
+  is expressible as a JSON merge patch. This is what lets a stored
+  override change structure without cloning the note body.
+
+Rules that follow, and where they are owned:
+
+1. **`type` is authoritative; `attrs.done` is read only for item rows.**
+   That makes an entry which outlives its item type harmless rather than
+   corrupting a prose row — but it is tolerance, not memory. The reducer
+   *drops* `done` on a type change, so a host must clear the entry in the
+   same patch: storage never resurrects state the model discarded. (The
+   first draft of this rule claimed the opposite; `demo/storage/patch.ts`
+   disagreed with the reducer until a test caught it, 2026-09-03.)
+2. **`parseDoc` is tolerant, `keyBetween` is strict.** Independent
+   overrides routinely compose into partial rows, so parsing fills
+   defaults, orders unusable sort keys last, and collapses newlines
+   (§2.6) rather than dropping data. Minting a key from garbage is a
+   programming error and throws.
+3. **Sort-key ties break by row id**, so two overrides that mint the same
+   key are a tie every reader resolves identically — not a conflict.
+4. **Referential integrity is the codec's job**, not the format's:
+   `parseDoc` ignores attrs naming absent rows, `serializeDoc` collects
+   them.
+5. **This shape is storage, never the model.** `Row[]` stays flat and
+   array-shaped; the reducer, the focus contract and `applyExternalRows`
+   would all pay a join for the normalization and gain nothing. The two
+   representations meet in `doc.ts` and nowhere else.
+
+Hosts writing incrementally do not call `serializeDoc` at all — they
+derive patches from `onAction`. It exists for creating a document, and
+for rebalancing keys that have grown long under heavy patching (call it
+without `previous`).
 
 ## 5. Open findings
 

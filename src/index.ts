@@ -12,6 +12,17 @@ export {
 } from "./react/Editor";
 export { Toolbar, type ToolbarRenderProps } from "./react/Toolbar";
 export { parseMarkdown, serialize } from "./core/markdown";
+export {
+  parseDoc,
+  serializeDoc,
+  mergeDoc,
+  type NoteDoc,
+  type DocRow,
+  type DocAttrs,
+  type DocRowPatch,
+  type NotePatch,
+} from "./core/doc";
+export { keyBetween, keysBetween, isValidKey } from "./core/sortkey";
 export type {
   Row,
   RowId,
