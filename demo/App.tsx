@@ -1,17 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  mergeDoc,
   NoteProvider,
+  parseDoc,
   serialize,
+  serializeDoc,
   useNote,
   useNoteStore,
   useOnAction,
   useOnRowsChange,
+  type NoteDoc,
+  type NotePatch,
 } from "../src";
 import { DebugHud } from "./components/DebugHud";
 import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
 import { actionToWrites, plannerToRows, rowsToPlanner } from "./planner/adapter";
 import { SAMPLE_PLANNER, type PlannerItem } from "./planner/data";
+import { actionToPatch } from "./storage/patch";
 import "./styles.css";
 
 // DEBUG: on-screen event log (visual viewport, scrolls, focus) so a jump on
@@ -56,6 +62,12 @@ function useKeyboardDock() {
 // row-grain adapter — no markdown in between.
 const INITIAL_ROWS = plannerToRows(SAMPLE_PLANNER);
 
+// The same note in the JSON storage shape. Everything after this point is
+// reached by merging patches into it — the document is never re-serialized.
+const INITIAL_DOC = serializeDoc(INITIAL_ROWS);
+
+type Stored = { doc: NoteDoc; patches: NotePatch[] };
+
 /**
  * Live document VIEW — derives from the subscribed state, so it reflects
  * everything, including external pushes. Rendered inside a provider
@@ -83,6 +95,44 @@ function PlannerPreview({ items }: { items: PlannerItem[] }) {
   );
 }
 
+/**
+ * The JSON storage shape, and the override stream that produced it. Lives
+ * inside a provider island so it can check its own work: if merging the
+ * patches alone reproduces the editor's rows, the incremental write path
+ * is correct and nothing ever had to clone the note.
+ */
+function DocPreview({ stored }: { stored: Stored }) {
+  const { state } = useNote();
+  const inSync =
+    JSON.stringify(parseDoc(stored.doc)) === JSON.stringify(state.rows);
+  return (
+    <div>
+      <p className={inSync ? "sync-ok" : "sync-off"}>
+        {inSync
+          ? "merging patches alone reconstructs the editor exactly"
+          : "diverged — a partner push is not an edit, so it emits no patch"}
+      </p>
+      <pre className="md-preview">{JSON.stringify(stored.doc, null, 2)}</pre>
+      <p className="hint">
+        Content in <code>rows</code>, checkbox state in{" "}
+        <code>attrs.done</code>, order in each row's <code>sort</code> key —
+        so there is no positional array and every edit below is a plain JSON
+        merge patch.
+      </p>
+      <pre className="md-preview">
+        {stored.patches.length === 0
+          ? "(no patches yet — edit something)"
+          : stored.patches.map((p) => JSON.stringify(p)).join("\n\n")}
+      </pre>
+      <p className="hint">
+        One edit → one override, newest first. Ticking a box names only that
+        box; inserting a row mints one sort key and leaves its neighbours
+        alone.
+      </p>
+    </div>
+  );
+}
+
 /** Row-level writes as onAction translates them — newest first. Outside
     the provider like the other consumers: pure adapter output. */
 function WritesPreview({ writes }: { writes: string[] }) {
@@ -100,9 +150,9 @@ function WritesPreview({ writes }: { writes: string[] }) {
 }
 
 export default function App() {
-  const [panel, setPanel] = useState<"none" | "md" | "planner" | "writes">(
-    "none",
-  );
+  const [panel, setPanel] = useState<
+    "none" | "md" | "planner" | "writes" | "doc"
+  >("none");
   // Store lifetime is this component's; disposal is the hook's job.
   // The host mints DB-compatible ids for rows created in the editor.
   // NOT crypto.randomUUID: that API exists only in secure contexts
@@ -132,6 +182,18 @@ export default function App() {
     note,
     (rows, previous) => rowsToPlanner(rows, previous),
     SAMPLE_PLANNER,
+  );
+  // The stored document, maintained by merging one override per edit.
+  const stored = useOnAction<Stored>(
+    note,
+    (previous, action, prevRows, nextRows) => {
+      const patch = actionToPatch(action, prevRows, nextRows, previous.doc);
+      return {
+        doc: mergeDoc(previous.doc, patch),
+        patches: [patch, ...previous.patches].slice(0, 6),
+      };
+    },
+    { doc: INITIAL_DOC, patches: [] },
   );
   const writes = useOnAction<string[]>(
     note,
@@ -205,6 +267,13 @@ export default function App() {
               <button
                 className="bar-btn"
                 onPointerDown={(e) => e.preventDefault()}
+                onClick={() => setPanel((p) => (p === "doc" ? "none" : "doc"))}
+              >
+                JSON
+              </button>
+              <button
+                className="bar-btn"
+                onPointerDown={(e) => e.preventDefault()}
                 onClick={simulatePartnerEdit}
               >
                 Partner
@@ -243,6 +312,11 @@ export default function App() {
           )}
           {panel === "planner" && <PlannerPreview items={plannerItems} />}
           {panel === "writes" && <WritesPreview writes={writes} />}
+          {panel === "doc" && (
+            <NoteProvider store={note}>
+              <DocPreview stored={stored} />
+            </NoteProvider>
+          )}
         </div>
       </div>
       <div

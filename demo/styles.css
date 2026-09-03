@@ -319,3 +319,29 @@ body {
   overflow-x: auto;
   white-space: pre-wrap;
 }
+
+/* Whether merging the patch stream alone reproduces the editor's rows.
+   Diverges after a partner push — by design: pushes-in are not edits-out,
+   so they emit no patch. */
+.sync-ok,
+.sync-off {
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin: 0 0 10px;
+}
+
+.sync-ok::before {
+  content: "✓ ";
+}
+
+.sync-off::before {
+  content: "≠ ";
+}
+
+.sync-off {
+  color: var(--muted);
+  border-style: dashed;
+}
