@@ -23,6 +23,7 @@ export {
   type NotePatch,
   type SerializeOptions,
 } from "./core/doc";
+export { actionToPatch } from "./core/patch";
 export { keyBetween, keysBetween, isValidKey } from "./core/sortkey";
 export type {
   Row,

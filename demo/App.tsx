@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  actionToPatch,
   mergeDoc,
   NoteProvider,
   parseDoc,
@@ -18,7 +19,6 @@ import { EditorText } from "./components/EditorText";
 import { EditorToolbar } from "./components/EditorToolbar";
 import { actionToWrites, plannerToRows, rowsToPlanner } from "./planner/adapter";
 import { SAMPLE_PLANNER, type PlannerItem } from "./planner/data";
-import { actionToPatch } from "./storage/patch";
 import "./styles.css";
 
 // DEBUG: on-screen event log (visual viewport, scrolls, focus) so a jump on

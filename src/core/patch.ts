@@ -1,25 +1,27 @@
-import {
-  keyBetween,
-  isValidKey,
-  serializeDoc,
-  type Action,
-  type NoteDoc,
-  type NotePatch,
-  type Row,
-  type RowId,
-  type SerializeOptions,
-} from "../../src";
+import { serializeDoc } from "./doc";
+import type { NoteDoc, NotePatch, SerializeOptions } from "./doc";
+import { isValidKey, keyBetween } from "./sortkey";
+import type { Action, Row, RowId } from "./types";
 
 /**
- * Row-grain adapter for the JSON storage shape — HOST code, the thing a
- * real backend would own (architecture.md §4a). Each edit becomes a
- * NotePatch: a standalone override that names only what changed and never
- * restates the note body.
+ * One edit, as one patch over the stored document.
  *
- * Derived from `onAction`, not from diffing two documents — the action
+ * The third leg of the storage codec (architecture.md §4a): `parseDoc`
+ * reads a document into rows, `mergeDoc` composes a document with patches,
+ * and this turns what the editor just did into the patch that records it.
+ * A host that persists incrementally wires `onAction` to this and never
+ * re-serializes; a host that saves whole documents still gets its minimal
+ * change and merges it in. Either way the host never looks inside the
+ * document, which is what lets the shape stay this library's own.
+ *
+ * Derived from the action, not from diffing two documents — the action
  * says what happened, so the patch can be minimal without a comparison
  * pass. Sort keys for inserted rows are minted between their neighbours,
  * which is the whole reason order lives in the rows.
+ *
+ * `options.deletes` is the same choice `serializeDoc` takes: tombstone a
+ * removed row (the default, safe wherever a patch might reference it) or
+ * drop it outright (correct only for a document nothing else references).
  */
 
 function docKey(doc: NoteDoc, id: RowId): string | null {

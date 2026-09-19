@@ -2,7 +2,7 @@
 
 Structured note editor: a row model (headers, checklist items, text) with a
 reducer, a store, a markdown codec, a JSON document codec with fractional sort
-keys, and React bindings.
+keys and per-edit patches, and React bindings.
 
 ```bash
 npm install @mikrostack/notes

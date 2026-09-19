@@ -17,7 +17,7 @@ demo/        skin       (App.tsx, styles.css, main.tsx — outside the package)
 src/react/   binding    (context.tsx, bindings.ts, Editor.tsx, Toolbar.tsx)
     │
 src/core/    core       (types.ts, id.ts, markdown.ts, reducer.ts, store.ts,
-                        sortkey.ts, doc.ts)
+                        sortkey.ts, doc.ts, patch.ts)
 
 src/index.ts — the public surface; the only module consumers import from.
 ```
@@ -109,8 +109,8 @@ Declared in `src/index.ts`:
   `useNote().state`.
 - `Editor`, `Toolbar`
 - `parseMarkdown`, `serialize` — markdown interchange, ids regenerated
-- `parseDoc`, `serializeDoc`, `mergeDoc` — the JSON persistence codec
-  (§4a); id-preserving, unlike markdown
+- `parseDoc`, `serializeDoc`, `mergeDoc`, `actionToPatch` — the JSON
+  persistence codec (§4a); id-preserving, unlike markdown
 - `keyBetween`, `keysBetween`, `isValidKey` — fractional sort keys, so a
   host adapter can mint a key for a row it inserts
 - The types: `Row`, `RowId`, `GenId`, `Caret`, `State`, `Action` (and row
@@ -222,8 +222,9 @@ Rules that follow, and where they are owned:
    corrupting a prose row — but it is tolerance, not memory. The reducer
    *drops* `done` on a type change, so a host must clear the entry in the
    same patch: storage never resurrects state the model discarded. (The
-   first draft of this rule claimed the opposite; `demo/storage/patch.ts`
-   disagreed with the reducer until a test caught it, 2026-09-03.)
+   first draft of this rule claimed the opposite; `actionToPatch` — then
+   host code in the demo — disagreed with the reducer until a test caught
+   it, 2026-09-03.)
 2. **`parseDoc` is tolerant, `keyBetween` is strict.** Independent
    overrides routinely compose into partial rows, so parsing fills
    defaults, orders unusable sort keys last, and collapses newlines
@@ -272,9 +273,21 @@ Rules that follow, and where they are owned:
    representations meet in `doc.ts` and nowhere else.
 
 Hosts writing incrementally do not call `serializeDoc` at all — they
-derive patches from `onAction`. It exists for creating a document, and
-for rebalancing keys that have grown long under heavy patching (call it
-without `previous`).
+derive patches from `onAction` through `actionToPatch`. It exists for
+creating a document, and for rebalancing keys that have grown long under
+heavy patching (call it without `previous`).
+
+8. **`actionToPatch` is part of the codec, not host code** (*moved from the
+   demo 2026-09-19*). It turns one dispatched action into the minimal
+   `NotePatch` that records it, so a host wires `onAction` to it and never
+   opens the document. It began life as the demo's storage adapter on the
+   theory that patch derivation was a backend concern; it is not — it
+   depends only on the action union and the document shape, both of which
+   are this library's, and a host that had to write it would have to know
+   the shape. That is exactly the knowledge the codec exists to keep on
+   this side of the boundary. A host that saves whole documents uses it
+   too: it merges the patch into its copy and writes the result, so the
+   storage choice stays the host's and the shape stays ours.
 
 ## 5. Open findings
 

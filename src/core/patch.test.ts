@@ -1,14 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  mergeDoc,
-  NoteStore,
-  parseDoc,
-  serializeDoc,
-  type NoteDoc,
-  type NotePatch,
-  type Row,
-  type SerializeOptions,
-} from "../../src";
+import { mergeDoc, parseDoc, serializeDoc } from "./doc";
+import type { NoteDoc, NotePatch, SerializeOptions } from "./doc";
+import { NoteStore } from "./store";
+import type { Row } from "./types";
 import { actionToPatch } from "./patch";
 
 const ROWS: Row[] = [
