@@ -1,6 +1,6 @@
 {
   "name": "@mikrostack/notes",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Structured note editor: rows, headers, checklists, with React bindings",
   "type": "module",
   "repository": {
