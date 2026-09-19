@@ -52,7 +52,10 @@ src/index.ts — the public surface; the only module consumers import from.
   guard on its container; a render-prop child owns every pixel.
 - `Editor` is its counterpart for the editor body: it maps rows to a
   render-prop child and owns the keyed-by-row-id invariant (spec §7) and
-  the container's list semantics; all row markup is the child's.
+  the container's list semantics; all row markup is the child's. Its
+  `autoFocus` prop is the one host-facing way to place the caret without
+  knowing row ids: a mount-time `focusRow` on the first row, dispatched
+  through the store so it lands by the ordinary §6 path.
 
 Nothing in `src/` may import from `demo/`. Nothing in `src/core/` may
 import from `src/react/`. Violations of direction are always findings,

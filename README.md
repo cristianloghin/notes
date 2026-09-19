@@ -10,6 +10,8 @@ npm install @mikrostack/notes
 
 React 18 or 19 is a peer dependency. The package ships no CSS; render props on
 `Editor` and `Toolbar` let the host app supply its own markup and styles.
+`autoFocus` puts the caret in the first row on mount, as the DOM attribute
+would, without the host knowing row ids.
 
 ```tsx
 import { NoteStore, NoteProvider, Editor, Toolbar } from "@mikrostack/notes";
@@ -18,7 +20,7 @@ const store = new NoteStore(source);
 
 <NoteProvider store={store}>
   <Toolbar />
-  <Editor />
+  <Editor autoFocus />
 </NoteProvider>;
 ```
 

@@ -1,4 +1,10 @@
-import { Fragment, type CSSProperties, type ReactNode } from "react";
+import {
+  Fragment,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useEditorBindings } from "./bindings";
 import { useNote } from "./context";
 import type { Row } from "../core/types";
@@ -36,6 +42,7 @@ export function Editor({
   className,
   style,
   scrollOnFocus,
+  autoFocus = false,
 }: {
   children: (props: EditorRowRenderProps) => ReactNode;
   className?: string;
@@ -43,8 +50,26 @@ export function Editor({
   /** Reveal the focused row after model-side focus placement (default
       true). Set false if the host owns all scrolling. */
   scrollOnFocus?: boolean;
+  /** Place the caret at the start of the first row on mount, unless the
+      store already has a focus. Like the DOM attribute: read once, on
+      mount. The placement goes through the store as a `focusRow` action,
+      so it lands by the same §6 path as any structural action — and only
+      keeps the iOS keyboard if the mount itself happens inside a tap's
+      synchronous call stack. */
+  autoFocus?: boolean;
 }) {
   const { store, state } = useNote();
+
+  // Mount-only, like the DOM attribute; a layout effect so the dispatch
+  // and the resulting placement stay inside the originating event.
+  const wantsAutoFocus = useRef(autoFocus);
+  useLayoutEffect(() => {
+    if (!wantsAutoFocus.current) return;
+    const { rows, focus } = store.getState();
+    if (focus || rows.length === 0) return;
+    store.dispatch({ type: "focusRow", id: rows[0].id, offset: 0 });
+  }, [store]);
+
   const { containerRef, getRowProps, getCheckboxProps } = useEditorBindings(
     store,
     state,

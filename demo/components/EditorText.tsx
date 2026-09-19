@@ -2,7 +2,7 @@ import { Editor } from "../../src";
 
 export const EditorText = () => {
   return (
-    <Editor className="editor">
+    <Editor className="editor" autoFocus>
       {({ row, fieldProps, checkboxProps }) =>
         row.type === "header" ? (
           <div className="row row-header" key={row.id} role="listitem">
