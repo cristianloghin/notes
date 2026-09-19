@@ -104,6 +104,22 @@ function deletePatch(
   return patch;
 }
 
+/**
+ * A row the editor has and the document does not: the blank row an empty
+ * note opens with, which has no stored identity until the user types into
+ * it (spec: the editor always holds at least one row). Its first edit of
+ * any kind adopts it whole — type, text, a minted key, and its tick if it
+ * has one — since a field-only patch would land on nothing.
+ */
+function adoptPatch(row: Row, nextRows: Row[], doc: NoteDoc): NotePatch {
+  const minted = keysForNewRows(nextRows, doc);
+  const patch: NotePatch = {
+    rows: { [row.id]: { type: row.type, text: row.text, sort: minted[row.id] } },
+  };
+  if (row.type === "item" && row.done) patch.attrs = { done: { [row.id]: true } };
+  return patch;
+}
+
 /** Last resort for an action this adapter doesn't model: restate every
     row and every checkbox. The one case that does clone the note. */
 function fullPatch(
@@ -136,6 +152,7 @@ export function actionToPatch(
     case "toggleDone": {
       const row = nextRows.find((r) => r.id === action.id);
       if (row?.type !== "item") break;
+      if (!doc.rows[row.id]) return adoptPatch(row, nextRows, doc);
       // The entire override for ticking a box — row content untouched.
       return { attrs: { done: { [row.id]: row.done } } };
     }
@@ -144,6 +161,7 @@ export function actionToPatch(
     case "setRowType": {
       const row = nextRows.find((r) => r.id === action.id);
       if (!row) break;
+      if (!doc.rows[row.id]) return adoptPatch(row, nextRows, doc);
       const patch: NotePatch = {
         rows: { [row.id]: { type: row.type, text: row.text } },
       };

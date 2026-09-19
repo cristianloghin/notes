@@ -170,6 +170,54 @@ describe("actionToPatch", () => {
   });
 });
 
+describe("actionToPatch on an empty document", () => {
+  /** A fresh note: the store seeds one blank row the document knows nothing about. */
+  function fresh() {
+    let n = 0;
+    const store = new NoteStore({ genId: () => `new-${++n}` });
+    let doc: NoteDoc = serializeDoc([]);
+    store.onAction((action, prevRows, nextRows) => {
+      doc = mergeDoc(doc, actionToPatch(action, prevRows, nextRows, doc));
+    });
+    return { store, get doc() { return doc; }, sync: () => expect(parseDoc(doc)).toEqual(store.getState().rows) };
+  }
+
+  it("adopts the seeded blank row, with a key, on its first keystroke", () => {
+    const h = fresh();
+    const [blank] = h.store.getState().rows;
+    h.store.dispatch({ type: "setText", id: blank.id, text: "milk" });
+    expect(h.doc.rows[blank.id]).toMatchObject({ type: "item", text: "milk" });
+    expect(typeof h.doc.rows[blank.id].sort).toBe("string");
+    h.sync();
+  });
+
+  it("adopts it on a tick or a type change too, not only on text", () => {
+    const h = fresh();
+    const [blank] = h.store.getState().rows;
+    h.store.dispatch({ type: "toggleDone", id: blank.id });
+    expect(h.doc.rows[blank.id]).toBeDefined();
+    expect(h.doc.attrs?.done?.[blank.id]).toBe(true);
+    h.sync();
+
+    const g = fresh();
+    const [row] = g.store.getState().rows;
+    g.store.dispatch({ type: "setRowType", id: row.id, rowType: "header" });
+    expect(g.doc.rows[row.id]).toMatchObject({ type: "header" });
+    expect(typeof g.doc.rows[row.id].sort).toBe("string");
+    g.sync();
+  });
+
+  it("keys a row split off the seeded one after it", () => {
+    const h = fresh();
+    const [blank] = h.store.getState().rows;
+    h.store.dispatch({ type: "setText", id: blank.id, text: "milk" });
+    h.store.dispatch({ type: "split", id: blank.id, offset: 4 });
+    const keys = h.store.getState().rows.map((r) => h.doc.rows[r.id].sort);
+    expect([...keys].sort()).toEqual(keys);
+    h.sync();
+  });
+});
+
 describe("actionToPatch with deletes: drop", () => {
   const drop: SerializeOptions = { deletes: "drop" };
 
