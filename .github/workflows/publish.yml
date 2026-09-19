@@ -1,0 +1,43 @@
+# Publishes to npm via Trusted Publishing (OIDC): no npm token is stored in
+# the repo. The npm side is configured for this repository and this workflow
+# file name, so renaming the file breaks the trust relationship.
+#
+# Release flow: bump "version" in package.json, commit, tag it vX.Y.Z, push
+# the tag. prepublishOnly runs typecheck, tests and the build.
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC trusted publishing and provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+      - run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - name: Check tag matches package.json version
+        run: |
+          pkg="$(npm pkg get version | tr -d '"')"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$pkg" != "$tag" ]; then
+            echo "Tag v$tag does not match package.json version $pkg" >&2
+            exit 1
+          fi
+
+      - run: npm publish --access public
