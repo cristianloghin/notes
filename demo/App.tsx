@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   actionToPatch,
   mergeDoc,
@@ -26,37 +26,14 @@ import "./styles.css";
 const DEBUG_HUD = false;
 
 /**
- * The layout is fully static (CSS 100dvh shell; the list scrolls in its own
- * container) — JS never sizes or translates the content, which is what made
- * the page jump on focus changes. The ONLY thing that tracks the keyboard
- * is the toolbar dock, and it is positioned imperatively inside the
- * visualViewport event (no React re-render, no frame lag): worst case a
- * viewport flutter twitches the bar, never the content. Safari's own small
- * focus-reveal pan is left alone — it is the desired behavior.
+ * The reference skin for the keyboard (spec §9). The library publishes the
+ * visual viewport as custom properties on the root while the Editor is
+ * mounted; the shell is pinned to that rectangle in CSS (styles.css), its
+ * list scrolls inside it with the overscroll contained, and the toolbar is
+ * an ordinary flex child at the shell's bottom — on the keyboard when one is
+ * up, at the screen's edge when not. No JavaScript here sizes, moves or
+ * scrolls anything.
  */
-function useKeyboardDock() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const el = ref.current;
-    if (!vv || !el) return;
-    const update = () => {
-      // Distance from the layout viewport's bottom edge to the keyboard top.
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      el.style.transform = inset > 0 ? `translateY(-${inset}px)` : "";
-      setKeyboardOpen(window.innerHeight - vv.height > 100);
-    };
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    update();
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
-  return { ref, keyboardOpen };
-}
 
 // The demo's "database": a Planner-shaped list (list_item rows). The note
 // is READ from this shape and every edit is SAVED back to it through the
@@ -238,38 +215,8 @@ export default function App() {
       [...actionToWrites(action, prevRows, nextRows), ...previous].slice(0, 12),
     [],
   );
-  const dock = useKeyboardDock();
-  const shellRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const obs = (vv: VisualViewport | null) => {
-      if (!vv) return;
-
-      const height = vv.height + vv.offsetTop;
-
-      const shell = shellRef.current;
-      if (!shell || shell.getBoundingClientRect().height === height) return;
-
-      // shell.style.height = height + "px";
-    };
-
-    const listener = (e: VisualViewportEventMap["scroll" | "resize"]) => {
-      console.log(e);
-      obs(e.target as VisualViewport | null);
-    };
-
-    window.visualViewport?.addEventListener("scroll", listener);
-    window.visualViewport?.addEventListener("resize", listener);
-    obs(window.visualViewport);
-
-    return () => {
-      window.visualViewport?.removeEventListener("scroll", listener);
-      window.visualViewport?.removeEventListener("resize", listener);
-    };
-  }, []);
-
   return (
-    <div className="shell" ref={shellRef}>
+    <div className="shell">
       {DEBUG_HUD && <DebugHud />}
       <div className="scroll-area">
         <div className="app">
@@ -360,10 +307,7 @@ export default function App() {
           )}
         </div>
       </div>
-      <div
-        className={`toolbar-dock${dock.keyboardOpen ? " kb-open" : ""}`}
-        ref={dock.ref}
-      >
+      <div className="toolbar-dock">
         <NoteProvider store={note}>
           <EditorToolbar />
         </NoteProvider>

@@ -24,6 +24,37 @@ const store = new NoteStore(source);
 </NoteProvider>;
 ```
 
+## The keyboard
+
+On iOS the soft keyboard shrinks only the visual viewport and pans it; CSS
+cannot see it. While an `Editor` is mounted the library publishes the visual
+viewport as custom properties on the root — `--note-vv-top`, `--note-vv-left`,
+`--note-vv-width`, `--note-vv-height`, `--note-vv-scale` — and sets
+`data-note-keyboard` on the root while the keyboard is open. Pin your shell to
+that rectangle, contain its scroller's overscroll, and put the toolbar in flow
+at the shell's bottom; it then sits on the keyboard with no JavaScript of your
+own:
+
+```css
+.shell {
+  position: fixed;
+  top: var(--note-vv-top, 0px);
+  left: var(--note-vv-left, 0px);
+  width: var(--note-vv-width, 100%);
+  height: var(--note-vv-height, 100%);
+  display: flex;
+  flex-direction: column;
+}
+.shell .scroller { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.shell .toolbar { flex: none; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+:root[data-note-keyboard] .shell .toolbar { padding-bottom: 8px; }
+```
+
+The demo's `styles.css` is the reference. The `Editor` reveals the focused
+row after it places the caret and after the keyboard has resized the
+viewport; `scrollOnFocus={false}` turns both off for a host that owns all
+scrolling.
+
 See `docs/note-editor-spec.md` for the editing model and
 `docs/architecture.md` for the module boundaries.
 

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -303,5 +304,22 @@ export function useEditorBindings(
     };
   }
 
-  return { containerRef, getRowProps, getCheckboxProps };
+  // The reveal policy's other half: bring the field that has the focus into
+  // view, if it is one of ours. Called after the keyboard has resized the
+  // viewport and the shell has re-laid itself around it — WebKit does not
+  // reveal carets into nested scroll containers, so it must be done here.
+  // Same `nearest` reveal as after a model-side placement, same switch.
+  const revealFocus = useCallback(() => {
+    if (!scrollOnFocus) return;
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLTextAreaElement &&
+      active.dataset.rowId !== undefined &&
+      refs.current.get(active.dataset.rowId) === active
+    ) {
+      active.scrollIntoView({ block: "nearest" });
+    }
+  }, [scrollOnFocus]);
+
+  return { containerRef, getRowProps, getCheckboxProps, revealFocus };
 }

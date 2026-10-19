@@ -14,7 +14,8 @@ Three layers, dependencies point strictly downward:
 ```
 demo/        skin       (App.tsx, styles.css, main.tsx — outside the package)
     │
-src/react/   binding    (context.tsx, bindings.ts, Editor.tsx, Toolbar.tsx)
+src/react/   binding    (context.tsx, bindings.ts, viewport.ts, Editor.tsx,
+                        Toolbar.tsx)
     │
 src/core/    core       (types.ts, id.ts, markdown.ts, reducer.ts, store.ts,
                         sortkey.ts, doc.ts, patch.ts)
@@ -34,17 +35,23 @@ src/index.ts — the public surface; the only module consumers import from.
   (`applyExternalRows` — caret placement has one owner). The store does
   not serialize; string-grain hosts call
   `serialize(store.getState().rows)`.
-- **Binding** owns exactly five jobs: providing the store through context
+- **Binding** owns exactly six jobs: providing the store through context
   (`useSyncExternalStore`), managing store lifecycle (`useNoteStore`
   constructs and disposes with the owning component), binding the store's
   consumer seams to React state (`useOnRowsChange`, `useOnAction`),
-  translating DOM input events into actions, and applying `state.focus`
-  to the DOM (the focus contract, spec §6). It computes nothing about documents or carets itself.
+  translating DOM input events into actions, applying `state.focus`
+  to the DOM (the focus contract, spec §6), and publishing the visual
+  viewport (`viewport.ts`: custom properties on the root while an `Editor`
+  is mounted, settled decision 8). It computes nothing about documents or
+  carets itself, and it moves nothing: the viewport is published as
+  numbers for the skin's CSS, never applied to an element.
   Dispatches from discrete events flush subscribers synchronously, so the
   focus contract's same-call-stack guarantee survives the store
   indirection.
-- **Skin** owns presentation: layout, theming, viewport/keyboard handling,
-  toolbar markup. The demo skin is a reference consumer, not part of the
+- **Skin** owns presentation: layout, theming, toolbar markup, and the
+  keyboard layout — a shell pinned in CSS to the viewport the binding
+  publishes, with a toolbar in flow at its bottom (the demo's `styles.css`
+  is the reference). The demo skin is a reference consumer, not part of the
   library — it lives outside `src/` and imports only from `src/index.ts`,
   never from individual lib modules.
 - `Toolbar` is a headless binding-layer component: it derives the command
@@ -97,6 +104,25 @@ earned through a bug.
    is lossless for text/structure but regenerates ids (spec §8). Therefore
    markdown must never be used as a persistence bridge by a host that needs
    stable item identity — see §4.
+8. **The binding measures the keyboard; the skin lays out from it; nothing
+   is moved or scrolled from a viewport event.** On iOS the keyboard shrinks
+   only the visual viewport, pans it to reveal the focused field, and can
+   briefly shrink `innerHeight` and snap it back — so any formula that
+   subtracts `innerHeight`, measures a fixed box, or scrolls content from
+   inside a viewport event lands somewhere different on every keystroke
+   (the Planner's dock, three iterations, 2026-09/10). The surviving
+   pattern, shared by every open-source editor surveyed that docks a bar on
+   the iOS keyboard (BlockNote's mobile toolbar, Svedit, Catch): one
+   `visualViewport` listener publishes the rectangle as CSS custom
+   properties; the shell is pinned to that rectangle in CSS with its
+   scroller's overscroll contained, so a drag scrolls content instead of
+   panning the viewport; the bar is an ordinary child at the shell's
+   bottom; the keyboard is judged open against the tallest zoom-corrected
+   height seen at this width, never `innerHeight`. The binding publishes
+   (`viewport.ts`), the skin pins (demo `styles.css`), and the only scroll
+   is the reveal policy's: the focused row, once, after the keyboard has
+   resized the viewport, because WebKit does not reveal carets into nested
+   scroll containers. (2026-10-19.)
 
 ## 3. Public surface
 
@@ -297,11 +323,15 @@ heavy patching (call it without `previous`).
 Still open, with disposition (details in the reviewer's memory,
 `review-open-findings-notes.md`):
 
-- **Reveal policy in the binding** — *partially addressed 2026-08-08*: the
-  iOS opacity blink is removed (obsolete since the static-layout redesign
-  made Safari's focus-reveal pan the desired behavior); `scrollIntoView`
-  and autosize remain in the binding, `scrollIntoView` gated by
-  `scrollOnFocus`. Full move-to-skin still open; do before any second skin.
+- ~~**Reveal policy in the binding**~~ — *resolved 2026-10-19, the other
+  way*: the reveal stays in the binding on purpose. WebKit does not reveal
+  carets into nested scroll containers, so a skin with a pinned shell
+  (settled decision 8) would have to re-implement it; instead the binding
+  reveals the focused row with `block: "nearest"` after a model-side
+  placement and after a keyboard resize, both behind the one
+  `scrollOnFocus` switch, and a skin that owns all scrolling turns it off.
+  The iOS opacity blink was removed 2026-08-08; autosize remains as the
+  `field-sizing` fallback.
 - ~~**`beforeinput` wired via ref-callback expando**~~ — *resolved
   2026-08-08, forced by a production bug*: the attach-once listeners held
   the first store's dispatch, so `useNoteStore`'s StrictMode remount

@@ -232,9 +232,13 @@ The parser is also the paste handler. Pasting multi-line text runs it directly.
 - Suppress structural handling between `compositionstart` and `compositionend`.
 - Soft keyboards expose no arrow keys. Row traversal on a phone is Enter,
   Backspace, and tapping. Arrow handling serves hardware keyboards and iPad.
-- Keep the focused row above the keyboard using `visualViewport`. Do not rely on
-  the VirtualKeyboard API or `interactive-widget` — neither is available in
-  Safari.
+- The keyboard is laid out around, not tracked: while an `Editor` is mounted
+  the library publishes the visual viewport as `--note-vv-top/left/width/height/
+  scale` on the root and sets `data-note-keyboard` while the keyboard is open;
+  the skin pins its shell to that rectangle in CSS, contains its scroller's
+  overscroll, and puts the toolbar in flow at the shell's bottom. Do not rely
+  on the VirtualKeyboard API or `interactive-widget` — neither is available
+  in Safari — and never on `innerHeight`, which iOS can shrink and snap back.
 - Any drag affordance (v2) must originate from a non-editable gutter element
   with `user-select: none` and `-webkit-touch-callout: none`, to avoid colliding
   with the native long-press selection callout.

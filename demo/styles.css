@@ -44,20 +44,33 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* The shell is pinned to the visual viewport the library publishes while
+   the Editor is mounted (--note-vv-*): with the keyboard up, its bottom edge
+   is the keyboard's top edge; without one, the custom properties are absent
+   and the fallbacks make it the screen. It never scrolls — .scroll-area
+   does, with its overscroll contained so a drag scrolls the list instead of
+   panning the viewport (which is what makes a docked toolbar swim). */
 .shell {
-  height: 100dvh;
-  overflow: scroll;
+  position: fixed;
+  top: var(--note-vv-top, 0px);
+  left: var(--note-vv-left, 0px);
+  width: var(--note-vv-width, 100%);
+  height: var(--note-vv-height, 100%);
+  display: flex;
+  flex-direction: column;
 }
 
 .scroll-area {
-  
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .app {
   max-width: 560px;
   margin: 0 auto;
-  /* Bottom clearance for the fixed toolbar dock. */
-  padding: 12px 12px calc(84px + env(safe-area-inset-bottom));
+  padding: 12px 12px 24px;
 }
 
 .topbar {
@@ -213,15 +226,10 @@ body {
   padding: 0 4px;
 }
 
-/* The only keyboard-tracking element. Positioned imperatively (transform)
-   inside the visualViewport event — content layout never depends on it. */
+/* An ordinary flex child at the shell's bottom: nothing tracks the keyboard,
+   the shell's own edge does. */
 .toolbar-dock {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10;
-  will-change: transform;
+  flex: none;
 }
 
 .toolbar {
@@ -231,8 +239,9 @@ body {
 }
 
 /* With the keyboard up, the shell's bottom edge is the keyboard top — the
-   home-indicator safe area is behind the keyboard, so drop that padding. */
-.kb-open .toolbar {
+   home-indicator safe area is behind the keyboard, so drop that padding.
+   The library sets the attribute while it judges the keyboard open. */
+:root[data-note-keyboard] .toolbar {
   padding-bottom: 8px;
 }
 

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { NoteStore } from "../core/store";
 import { NoteProvider } from "./context";
 import { Editor } from "./Editor";
+import { VIEWPORT_PROPERTIES } from "./viewport";
 
 function mount(store: NoteStore, autoFocus?: boolean) {
   return render(
@@ -23,6 +24,9 @@ beforeAll(() => {
 
 afterEach(() => {
   (document.activeElement as HTMLElement | null)?.blur();
+  // Unmount what each test rendered: a mounted Editor keeps the viewport
+  // published, and the publication tests need the count to reach zero.
+  cleanup();
 });
 
 describe("Editor autoFocus", () => {
@@ -74,5 +78,18 @@ describe("Editor autoFocus", () => {
     mount(store, true);
     act(() => {});
     expect(fired).toBe(0);
+  });
+});
+
+describe("Editor viewport publication", () => {
+  it("publishes the visual viewport on the root while mounted", () => {
+    const store = new NoteStore({ initial: "- alpha" });
+    const { unmount } = mount(store);
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue(VIEWPORT_PROPERTIES.height)).toBe(
+      `${window.innerHeight}px`,
+    );
+    unmount();
+    expect(root.style.getPropertyValue(VIEWPORT_PROPERTIES.height)).toBe("");
   });
 });

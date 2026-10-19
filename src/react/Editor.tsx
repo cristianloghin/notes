@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useEffect,
   useLayoutEffect,
   useRef,
   type CSSProperties,
@@ -7,6 +8,7 @@ import {
 } from "react";
 import { useEditorBindings } from "./bindings";
 import { useNote } from "./context";
+import { subscribeViewport } from "./viewport";
 import type { Row } from "../core/types";
 
 type Bindings = ReturnType<typeof useEditorBindings>;
@@ -36,6 +38,12 @@ export type EditorRowRenderProps = {
  * - Rows are keyed by row id, never by array index — index keys misplace
  *   focus on the first reorder (spec §7).
  * - The container carries list semantics (role="list").
+ *
+ * While mounted it also keeps the visual viewport published on the root
+ * element (viewport.ts), which is how a skin lays its shell and toolbar out
+ * around the soft keyboard — and after the keyboard has resized the
+ * viewport, it reveals the focused row once, since the shell just re-laid
+ * itself around it.
  */
 export function Editor({
   children,
@@ -47,8 +55,9 @@ export function Editor({
   children: (props: EditorRowRenderProps) => ReactNode;
   className?: string;
   style?: CSSProperties;
-  /** Reveal the focused row after model-side focus placement (default
-      true). Set false if the host owns all scrolling. */
+  /** Reveal the focused row after model-side focus placement, and after
+      the keyboard has resized the viewport (default true). Set false if
+      the host owns all scrolling. */
   scrollOnFocus?: boolean;
   /** Place the caret at the start of the first row on mount, unless the
       store already has a focus. Like the DOM attribute: read once, on
@@ -70,11 +79,17 @@ export function Editor({
     store.dispatch({ type: "focusRow", id: rows[0].id, offset: 0 });
   }, [store]);
 
-  const { containerRef, getRowProps, getCheckboxProps } = useEditorBindings(
-    store,
-    state,
-    scrollOnFocus,
+  const { containerRef, getRowProps, getCheckboxProps, revealFocus } =
+    useEditorBindings(store, state, scrollOnFocus);
+
+  useEffect(
+    () =>
+      subscribeViewport((keyboardOpen) => {
+        if (keyboardOpen) revealFocus();
+      }),
+    [revealFocus],
   );
+
   return (
     <div ref={containerRef} className={className} style={style} role="list">
       {state.rows.map((row, index) => (
